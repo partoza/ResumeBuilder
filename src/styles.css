@@ -105,25 +105,7 @@ button { font: inherit; color: inherit; }
 }
 .brand-mark svg path:first-child { fill: var(--bg); }
 .brand-name { font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
-.badge {
-  font-size: 11px; font-weight: 500;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--fg-muted);
-  white-space: nowrap;
-}
 .actions { display: flex; align-items: center; gap: 8px; }
-.save-state {
-  font-size: 12px; color: var(--fg-subtle);
-  display: inline-flex; align-items: center; gap: 6px;
-  margin-right: 4px;
-}
-.save-state::before {
-  content: ""; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--success);
-}
-.save-state.saving::before { background: var(--fg-subtle); }
 
 /* ============ Buttons ============ */
 .btn {
@@ -310,12 +292,27 @@ button { font: inherit; color: inherit; }
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   font-size: 12px; color: var(--fg-subtle); text-align: center;
 }
-.form-footer a {
+.form-footer .credit {
+  display: inline-flex; align-items: center; gap: 5px;
+  vertical-align: middle;
   color: var(--fg); font-weight: 500; text-decoration: none;
+}
+.form-footer .credit span {
   border-bottom: 1px solid var(--border-strong);
   transition: border-color .15s ease;
 }
-.form-footer a:hover { border-color: var(--fg); }
+.form-footer .credit:hover span { border-color: var(--fg); }
+/* Small tilted portrait, the same height as the text beside it */
+.credit-avatar {
+  width: 1.35em; height: 1.35em;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  transform: rotate(-8deg);
+  transition: transform .2s ease;
+}
+.credit:hover .credit-avatar { transform: rotate(0deg) scale(1.08); }
 
 /* ============ Preview ============ */
 .preview-toolbar {
@@ -412,7 +409,6 @@ button { font: inherit; color: inherit; }
 .seg.active { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--border), var(--shadow-sm); }
 
 @media (max-width: 1100px) {
-  .badge, .save-state { display: none; }
 }
 @media (max-width: 900px) {
   .topbar { padding: 0 16px; }

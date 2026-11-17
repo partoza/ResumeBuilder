@@ -176,7 +176,6 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark"><Logo /></span>
           <span className="brand-name">Resume Builder</span>
-          <span className="badge">PH Standard</span>
         </div>
 
         <div className="mobile-tabs" role="tablist" aria-label="View">
@@ -240,8 +239,15 @@ export default function App() {
               <span>Runs entirely in your browser — no account, no database.</span>
               <span>
                 Developed by{' '}
-                <a href="https://portfolio.partoza.dev" target="_blank" rel="noopener noreferrer">
-                  John Rex Partoza
+                <a className="credit" href="https://portfolio.partoza.dev" target="_blank" rel="noopener noreferrer">
+                  <img
+                    className="credit-avatar"
+                    src="/developer.png"
+                    alt=""
+                    aria-hidden="true"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  <span>John Rex Partoza</span>
                 </a>
               </span>
             </footer>
