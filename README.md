@@ -11,6 +11,7 @@ A frontend-only resume builder for Philippine job seekers. Fill in the form on o
 - **Built-in coaching** — flags weak bullet openers ("Responsible for…", "Helped…"), accomplishments without numbers, summaries outside 2–3 sentences, and invalid ZIP / phone / email formats.
 - **2-page limit indicator** — shows the real PDF page count and warns when the resume runs over.
 - **ATS-readable PDF** — generated with jsPDF using embedded Inter; every word is real, selectable text that applicant tracking systems can parse. The design matches the on-screen preview exactly.
+- **Cover Letter Builder** — a second tab for a standard block-format business letter (date, recipient, Re: line, salutation, opening / body / closing, sign-off, enclosure note), with a 1-page indicator and word count. The salutation fills itself in ("Dear Ms. Lim:" or "Dear Hiring Manager:").
 
 ## Getting started
 
@@ -41,11 +42,14 @@ src/
   data.js                 Form schema and sample data
   coach.js                Resume-writing checks shown under fields
   model.js                Normalizes form data for preview + PDF
-  exportPdf.js            Draws the PDF with jsPDF
+  letterData.js           Cover letter schema, sample data and model
+  exportPdf.js            Draws the resume and cover letter PDFs with jsPDF
   components/
     FormSection.jsx       Collapsible form cards and repeatable entries
     Field.jsx             Input / select / textarea with coaching hints
     ResumePreview.jsx     The on-screen A4 resume
+    LetterPreview.jsx     The on-screen A4 cover letter
+    ConfirmDialog.jsx     In-app confirmation modal
 ```
 
 ---

@@ -10,6 +10,8 @@ import inter700 from '@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf?url';
 import { HEADINGS, SUBHEADINGS } from './model.js';
 
 export const MAX_PAGES = 2;
+export const LETTER_MAX_PAGES = 1;
+const DOC_LABEL = { resume: 'Resume', letter: 'Cover Letter' };
 
 const PT = 25.4 / 72; // mm per point
 const PX = 25.4 / 96; // mm per CSS pixel
@@ -119,7 +121,7 @@ export function pdfText(s) {
 /* Drawing                                                             */
 /* ------------------------------------------------------------------ */
 
-export async function createResumePdf(m) {
+async function createPdf(kind, m) {
   const [fonts, icons] = await Promise.all([loadFonts(), loadIcons()]);
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
@@ -132,8 +134,8 @@ export async function createResumePdf(m) {
     }
   }
   doc.setProperties({
-    title: T(m.name ? `${m.name} - Resume` : 'Resume'),
-    subject: 'Resume',
+    title: T(m.name ? `${m.name} - ${DOC_LABEL[kind]}` : DOC_LABEL[kind]),
+    subject: DOC_LABEL[kind],
     author: T(m.name),
     creator: 'Resume Builder',
   });
@@ -259,6 +261,12 @@ export async function createResumePdf(m) {
     });
   }
 
+  // Cover letters have no letterhead: they start with the date.
+  if (kind === 'letter') {
+    drawLetter();
+    return doc;
+  }
+
   /* ---------- header ---------- */
 
   const photoSize = 1.5 * 25.4; // 1.5in, like the preview
@@ -322,6 +330,53 @@ export async function createResumePdf(m) {
   y = Math.max(y, m.photo ? headTop + photoSize : y) + 18 * PX;
   rule(y, 2 * PX, INK);
   y += 2 * PX;
+
+  /** Block-format business letter body (mirrors .r-letter styles). */
+  function drawLetter() {
+    const block = (lines, first = 'I400', firstColor = INK2) =>
+      lines.forEach((ln, i) => {
+        const [name, color] = i === 0 ? [first, firstColor] : ['I400', INK2];
+        font(name, 10.5, color);
+        for (const w of wrap(ln, width)) {
+          ensure(lh(10.5));
+          text(w, left, y, 10.5);
+          y += lh(10.5);
+        }
+      });
+
+    if (m.date) block([m.date]);
+    if (m.recipient.length) {
+      if (m.date) y += 20 * PX;
+      block(m.recipient, 'I600', INK);
+    }
+    if (m.subject) {
+      y += 20 * PX;
+      block([m.subject], 'I600', INK);
+    }
+    y += 16 * PX;
+    block([m.salutation], 'I400', INK);
+    for (const para of m.paragraphs) {
+      y += 12 * PX;
+      paragraph(para);
+    }
+    y += 20 * PX;
+    ensure(lh(10.5) * 2 + 44 * PX);
+    font('I400', 10.5, INK);
+    text(m.complimentary, left, y, 10.5);
+    y += lh(10.5) + 44 * PX;
+    if (m.name) {
+      font('I600', 10.5, INK);
+      text(m.name, left, y, 10.5);
+      y += lh(10.5);
+    }
+    if (m.enclosure) {
+      y += 20 * PX;
+      ensure(lh(9.5));
+      font('I400', 9.5, INK3);
+      text(m.enclosure, left, y, 9.5);
+      y += lh(9.5);
+    }
+  }
 
   /* ---------- summary ---------- */
 
@@ -399,3 +454,6 @@ export async function createResumePdf(m) {
 
   return doc;
 }
+
+export const createResumePdf = (model) => createPdf('resume', model);
+export const createLetterPdf = (model) => createPdf('letter', model);

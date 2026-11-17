@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FormSection from './components/FormSection.jsx';
 import ResumePreview from './components/ResumePreview.jsx';
+import LetterPreview from './components/LetterPreview.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 import { Download, Logo, Moon, Sun, Swap } from './components/Icons.jsx';
 import { SECTIONS, blankState, sampleState } from './data.js';
-import { fileName, sectionHasContent, setIn } from './utils.js';
+import {
+  LETTER_SECTIONS, blankLetter, buildLetterModel, letterHasContent, letterWordCount, sampleLetter,
+} from './letterData.js';
+import { fileName, sectionFilled, sectionHasContent, setIn } from './utils.js';
 import { buildModel } from './model.js';
-import { MAX_PAGES, createResumePdf, preloadPdfAssets } from './exportPdf.js';
+import { LETTER_MAX_PAGES, MAX_PAGES, createLetterPdf, createResumePdf, preloadPdfAssets } from './exportPdf.js';
 
 const PAPER_W = 794; // A4 width in CSS px at 96 dpi
 
@@ -60,9 +64,29 @@ function useToast() {
   return [notify, view];
 }
 
+/* ---------------------------- Documents ---------------------------- */
+const DOCS = {
+  resume: {
+    tab: 'Resume Builder',
+    heading: 'Build your resume',
+    intro: 'Answer the fields below in your own words — the preview formats them into an ATS-friendly resume. Nothing is stored; download your PDF when you’re done.',
+    max: MAX_PAGES,
+    fileLabel: 'Resume',
+  },
+  letter: {
+    tab: 'Cover Letter Builder',
+    heading: 'Write your cover letter',
+    intro: 'A standard block-format business letter: date, recipient, three short paragraphs and your sign-off. Keep it to one page.',
+    max: LETTER_MAX_PAGES,
+    fileLabel: 'Cover_Letter',
+  },
+};
+
 /* ------------------------------- App ------------------------------- */
 export default function App() {
   const [data, setData] = useState(() => withAllIds(blankState()));
+  const [letter, setLetter] = useState(blankLetter);
+  const [docTab, setDocTab] = useState('resume');
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [swap, setSwap] = useState(false);
   const [view, setView] = useState('edit'); // mobile only
@@ -76,9 +100,15 @@ export default function App() {
 
   const paperRef = useRef(null);
   const scrollRef = useRef(null);
+  const formScrollRef = useRef(null);
 
-  // One normalized model feeds both the preview and the PDF.
+  const isLetter = docTab === 'letter';
+  const docInfo = DOCS[docTab];
+
+  // One normalized model per document feeds both its preview and its PDF.
   const model = useMemo(() => buildModel(data), [data]);
+  const letterModel = useMemo(() => buildLetterModel(data.personal, letter), [data.personal, letter]);
+  const words = isLetter ? letterWordCount(letterModel) : 0;
 
   // Lay out the real PDF in the background to report its page count.
   const [pages, setPages] = useState(1);
@@ -87,7 +117,7 @@ export default function App() {
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        const doc = await createResumePdf(model);
+        const doc = await (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
         if (!cancelled) setPages(doc.getNumberOfPages());
       } catch { /* ignore */ }
     }, 300);
@@ -95,11 +125,20 @@ export default function App() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [model]);
-  const overLimit = pages > MAX_PAGES;
+  }, [isLetter, model, letterModel]);
+  const overLimit = pages > docInfo.max;
+
+  function switchDoc(next) {
+    if (next === docTab) return;
+    setDocTab(next);
+    setPages(1);
+    if (formScrollRef.current) formScrollRef.current.scrollTop = 0;
+  }
 
   /* ---- state updates ---- */
   const update = useCallback((path, value) => setData((d) => setIn(d, path, value)), []);
+
+  const updateLetter = useCallback((path, value) => setLetter((l) => setIn(l, path, value)), []);
 
   const setList = useCallback((id, nextOrFn, focusLast) => {
     setData((d) => ({ ...d, [id]: withIds(typeof nextOrFn === 'function' ? nextOrFn(d[id]) : nextOrFn) }));
@@ -114,18 +153,31 @@ export default function App() {
     }
   }, []);
 
-  const toggleSection = (id) =>
+  const toggleSection = (key) =>
     setCollapsed((c) => {
       const n = new Set(c);
-      n.has(id) ? n.delete(id) : n.add(id);
+      n.has(key) ? n.delete(key) : n.add(key);
       return n;
     });
 
-  const anyContent = SECTIONS.some((s) => sectionHasContent(data, s.id));
+  const resumeHasContent = SECTIONS.some((s) => sectionHasContent(data, s.id));
 
   async function loadSample() {
+    if (isLetter) {
+      if (
+        letterHasContent(letter) &&
+        !(await confirm({
+          title: 'Load sample cover letter?',
+          description: 'This replaces the letter you’ve written with an example.',
+          confirmLabel: 'Replace with sample',
+        }))
+      ) return;
+      setLetter(sampleLetter());
+      notify('Sample cover letter loaded');
+      return;
+    }
     if (
-      anyContent &&
+      resumeHasContent &&
       !(await confirm({
         title: 'Load sample resume?',
         description: 'This replaces everything you’ve entered with example data. Your current entries will be lost.',
@@ -135,8 +187,29 @@ export default function App() {
     setData(withAllIds(sampleState()));
     notify('Sample resume loaded');
   }
+
   async function clearAll() {
-    if (!anyContent) return notify('Nothing to clear');
+    if (isLetter) {
+      if (!letterHasContent(letter)) {
+        notify('Nothing to clear');
+        return;
+      }
+      if (
+        !(await confirm({
+          title: 'Clear the cover letter?',
+          description: 'The recipient, letter text and sign-off will be emptied. Your resume isn’t affected. This can’t be undone.',
+          confirmLabel: 'Clear letter',
+          danger: true,
+        }))
+      ) return;
+      setLetter(blankLetter());
+      notify('Cover letter cleared');
+      return;
+    }
+    if (!resumeHasContent) {
+      notify('Nothing to clear');
+      return;
+    }
     if (
       !(await confirm({
         title: 'Clear all fields?',
@@ -159,7 +232,7 @@ export default function App() {
     if (paperRef.current) setPaperH(paperRef.current.offsetHeight);
   }, [zoom]);
 
-  useLayoutEffect(fit, [fit, data, view]);
+  useLayoutEffect(fit, [fit, data, letter, docTab, view]);
 
   useEffect(() => {
     const ro = new ResizeObserver(fit);
@@ -167,7 +240,7 @@ export default function App() {
     if (paperRef.current) ro.observe(paperRef.current);
     document.fonts?.ready.then(fit);
     return () => ro.disconnect();
-  }, [fit]);
+  }, [fit, docTab]);
 
   const stepZoom = (dir) => setZoom(Math.min(1.5, Math.max(0.3, Math.round((scale + dir * 0.1) * 10) / 10)));
 
@@ -175,10 +248,11 @@ export default function App() {
   async function downloadPdf() {
     setBusy(true);
     try {
-      const doc = await createResumePdf(model);
+      const doc = await (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
       const n = doc.getNumberOfPages();
-      doc.save(fileName(data.personal));
-      notify(n > MAX_PAGES ? `Downloaded — but it’s ${n} pages. Trim it to ${MAX_PAGES} pages.` : 'PDF downloaded');
+      doc.save(fileName(data.personal, docInfo.fileLabel));
+      const unit = docInfo.max === 1 ? 'page' : 'pages';
+      notify(n > docInfo.max ? `Downloaded — but it’s ${n} pages. Trim it to ${docInfo.max} ${unit}.` : 'PDF downloaded');
     } catch (err) {
       console.error(err);
       notify('Could not generate PDF — try Print → Save as PDF');
@@ -186,6 +260,11 @@ export default function App() {
       setBusy(false);
     }
   }
+
+  const sections = isLetter ? LETTER_SECTIONS : SECTIONS;
+  const formState = isLetter ? letter : data;
+  const formUpdate = isLetter ? updateLetter : update;
+  const paperStyle = { transform: `scale(${scale})` };
 
   return (
     <>
@@ -224,33 +303,51 @@ export default function App() {
         </div>
       </header>
 
+      <nav className="doc-tabs" role="tablist" aria-label="Document">
+        {Object.entries(DOCS).map(([key, d]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={docTab === key}
+            className={`doc-tab${docTab === key ? ' active' : ''}`}
+            onClick={() => switchDoc(key)}
+          >
+            {d.tab}
+          </button>
+        ))}
+      </nav>
+
       <main className={`workspace${swap ? ' swap' : ''}`} data-view={view}>
-        <section className="pane pane-form" aria-label="Resume details">
+        <section className="pane pane-form" aria-label={`${docInfo.tab} form`} ref={formScrollRef}>
           <div className="form-inner">
             <div className="form-intro">
-              <h1>Build your resume</h1>
-              <p>Answer the fields below in your own words — the preview formats them into an ATS-friendly resume. Nothing is stored; download your PDF when you’re done.</p>
+              <h1>{docInfo.heading}</h1>
+              <p>{docInfo.intro}</p>
               <div className="intro-actions">
                 <button className="btn btn-secondary btn-sm" onClick={loadSample}>Load sample</button>
                 <button className="btn btn-ghost btn-sm danger" onClick={clearAll}>Clear all</button>
               </div>
             </div>
 
-            <form className="form" onSubmit={(e) => e.preventDefault()} autoComplete="on">
-              {SECTIONS.map((s, i) => (
-                <FormSection
-                  key={s.id}
-                  section={s}
-                  number={i + 1}
-                  state={data}
-                  done={sectionHasContent(data, s.id)}
-                  collapsed={collapsed.has(s.id)}
-                  onToggle={() => toggleSection(s.id)}
-                  update={update}
-                  setList={setList}
-                  notify={notify}
-                />
-              ))}
+            <form className="form" onSubmit={(e) => e.preventDefault()} autoComplete="on" key={docTab}>
+              {sections.map((s, i) => {
+                const key = `${docTab}:${s.id}`;
+                return (
+                  <FormSection
+                    key={key}
+                    section={s}
+                    number={i + 1}
+                    state={formState}
+                    done={sectionFilled(s, formState[s.id])}
+                    collapsed={collapsed.has(key)}
+                    onToggle={() => toggleSection(key)}
+                    update={formUpdate}
+                    setList={setList}
+                    notify={notify}
+                  />
+                );
+              })}
             </form>
             <footer className="form-footer">
               <span>
@@ -270,11 +367,12 @@ export default function App() {
           </div>
         </section>
 
-        <section className="pane pane-preview" aria-label="Resume preview">
+        <section className="pane pane-preview" aria-label={`${docInfo.tab} preview`}>
           <div className="preview-toolbar">
             <span className={`page-count${overLimit ? ' over' : ''}`}>
               A4 · {pages} {pages === 1 ? 'page' : 'pages'}
-              {overLimit ? ` — over the ${MAX_PAGES}-page limit` : ` of ${MAX_PAGES} max`}
+              {overLimit ? ` — over the ${docInfo.max}-page limit` : ` of ${docInfo.max} max`}
+              {isLetter && words > 0 && ` · ${words} words`}
             </span>
             <div className="zoom">
               <button className="btn btn-ghost btn-xs" aria-label="Zoom out" onClick={() => stepZoom(-1)}>−</button>
@@ -285,7 +383,11 @@ export default function App() {
           </div>
           <div className="preview-scroll" ref={scrollRef}>
             <div className="paper-wrap" style={{ width: PAPER_W * scale, height: paperH * scale }}>
-              <ResumePreview ref={paperRef} model={model} style={{ transform: `scale(${scale})` }} />
+              {isLetter ? (
+                <LetterPreview ref={paperRef} model={letterModel} style={paperStyle} />
+              ) : (
+                <ResumePreview ref={paperRef} model={model} style={paperStyle} />
+              )}
             </div>
           </div>
         </section>

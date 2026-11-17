@@ -21,6 +21,7 @@
   --radius: 8px;
   --radius-sm: 6px;
   --topbar-h: 60px;
+  --tabs-h: 44px;
   color-scheme: light;
 }
 
@@ -107,6 +108,42 @@ button { font: inherit; color: inherit; }
 .brand-name { font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
 .actions { display: flex; align-items: center; gap: 8px; }
 
+/* ============ Document tabs ============ */
+.doc-tabs {
+  height: var(--tabs-h);
+  display: flex; align-items: stretch; gap: 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.doc-tab {
+  position: relative;
+  isolation: isolate;
+  border: 0; background: none;
+  padding: 0 10px;
+  font-size: 14px; font-weight: 500;
+  color: var(--fg-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s ease;
+}
+.doc-tab::before {
+  content: ""; position: absolute; inset: 7px 0; z-index: -1;
+  border-radius: 6px; background: transparent;
+  transition: background .15s ease;
+}
+.doc-tab:hover { color: var(--fg); }
+.doc-tab:hover::before { background: var(--bg-muted); }
+.doc-tab.active { color: var(--fg); }
+.doc-tab.active::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px;
+  height: 2px; border-radius: 2px; background: var(--fg);
+}
+.doc-tab:focus-visible { outline: none; }
+.doc-tab:focus-visible::before { box-shadow: 0 0 0 2px var(--ring); }
+
 /* ============ Buttons ============ */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -142,8 +179,8 @@ button { font: inherit; color: inherit; }
 /* ============ Workspace (50 / 50) ============ */
 .workspace {
   display: flex;
-  height: calc(100vh - var(--topbar-h));
-  height: calc(100dvh - var(--topbar-h));
+  height: calc(100vh - var(--topbar-h) - var(--tabs-h));
+  height: calc(100dvh - var(--topbar-h) - var(--tabs-h));
 }
 .workspace.swap { flex-direction: row-reverse; }
 .pane { flex: 1 1 50%; width: 50%; min-width: 0; height: 100%; }
@@ -388,6 +425,19 @@ button { font: inherit; color: inherit; }
 
 .r-placeholder { color: #a1a1aa; }
 
+/* Cover letter (block format) — mirrors drawLetter() in exportPdf.js */
+.r-letter { font-size: 10.5pt; line-height: 1.5; color: var(--ink-2); }
+.r-letter p { margin: 0; }
+.r-letter .l-date { margin-top: 0; }
+.r-letter .l-recipient { margin-top: 20px; font-style: normal; }
+.r-letter .l-strong { font-weight: 600; color: var(--ink); }
+.r-letter .l-subject { margin-top: 20px; font-weight: 600; color: var(--ink); }
+.r-letter .l-salutation { margin-top: 16px; color: var(--ink); }
+.r-letter .l-para { margin-top: 12px; }
+.r-letter .l-close { margin-top: 20px; color: var(--ink); }
+.r-letter .l-sign-space { height: 44px; }
+.r-letter .l-enclosure { margin-top: 20px; font-size: 9.5pt; color: var(--ink-3); }
+
 /* ============ Toast ============ */
 .toast {
   position: fixed; left: 50%; bottom: 24px;
@@ -435,7 +485,7 @@ button { font: inherit; color: inherit; }
 @page { size: A4; margin: 0; }
 @media print {
   html, body { height: auto; overflow: visible; background: #fff; }
-  .topbar, .pane-form, .preview-toolbar, .toast { display: none !important; }
+  .topbar, .doc-tabs, .pane-form, .preview-toolbar, .toast, .modal-backdrop { display: none !important; }
   .workspace, .pane, .pane-preview, .preview-scroll { display: block !important; height: auto; width: auto; overflow: visible; padding: 0; background: none; }
   .paper-wrap { transform: none !important; width: auto !important; height: auto !important; }
   .paper { box-shadow: none; border-radius: 0; min-height: 0; transform: none !important; }

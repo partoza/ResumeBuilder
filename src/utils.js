@@ -25,9 +25,12 @@ export function fullName(p) {
 
 /** Whether a form section has anything the user filled in (drives the ✓ badge). */
 export function sectionHasContent(state, id) {
-  const s = SECTION_BY_ID[id];
-  const v = state[id];
-  const textual = (f) => f.type !== 'checkbox' && f.type !== 'select';
+  return sectionFilled(SECTION_BY_ID[id], state[id]);
+}
+
+/** Works for any section definition (resume or cover letter). */
+export function sectionFilled(s, v) {
+  const textual = (f) => f.type !== 'checkbox' && f.type !== 'select' && f.type !== 'date';
   if (s.kind === 'list') return v.some((it) => s.fields.some((f) => textual(f) && has(it[f.key])));
   return s.fields.some((f) => textual(f) && has(v[f.key]));
 }
@@ -65,9 +68,9 @@ export function cropPhoto(file, max = 480) {
   });
 }
 
-export function fileName(p) {
+export function fileName(p, label = 'Resume') {
   const parts = [p.lastName, p.firstName]
     .map((x) => (x || '').trim().replace(/[^\p{L}\p{N}]+/gu, '_'))
     .filter(Boolean);
-  return (parts.length ? parts.join('_') + '_' : '') + 'Resume.pdf';
+  return (parts.length ? parts.join('_') + '_' : '') + label + '.pdf';
 }
