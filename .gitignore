@@ -3,3 +3,6 @@ dist
 .claude/
 *.log
 .DS_Store
+
+# Local promo video work (not part of the app)
+promo/
