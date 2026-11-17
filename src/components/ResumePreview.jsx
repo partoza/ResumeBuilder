@@ -74,8 +74,8 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
 
       {(hard.length > 0 || soft.length > 0) && (
         <Section title={HEADINGS.skills}>
-          <Chips label={SUBHEADINGS.hard} items={hard} showLabel={soft.length > 0} />
-          <Chips label={SUBHEADINGS.soft} items={soft} showLabel={hard.length > 0} />
+          <Chips label={SUBHEADINGS.hard} items={hard} showLabel />
+          <Chips label={SUBHEADINGS.soft} items={soft} showLabel />
         </Section>
       )}
 

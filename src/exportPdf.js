@@ -446,17 +446,16 @@ async function createPdf(kind, m, { source } = {}) {
   const { hard, soft } = m.skills;
   if (hard.length || soft.length) {
     sectionTitle(HEADINGS.skills, 25 * PX);
-    const both = hard.length && soft.length;
+    // Both groups are always labelled, so the PDF says which skills are which
+    // (and imports back into the right fields).
     if (hard.length) {
-      if (both) level(SUBHEADINGS.hard, 0);
-      if (both) y += 3 * PX;
+      level(SUBHEADINGS.hard, 0);
+      y += 3 * PX;
       chips(hard);
     }
     if (soft.length) {
-      if (both) {
-        level(SUBHEADINGS.soft, 8 * PX);
-        y += 3 * PX;
-      }
+      level(SUBHEADINGS.soft, hard.length ? 8 * PX : 0);
+      y += 3 * PX;
       chips(soft);
     }
   }

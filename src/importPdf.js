@@ -9,6 +9,7 @@ import { loadPdfjs } from './pdfjs.js';
 import { extractEmbedded } from './exportPdf.js';
 import { EXPERIENCE_TYPES, LINK_TYPES } from './data.js';
 import { COMPLIMENTARY_CLOSES } from './letterData.js';
+import { splitTopLevel } from './utils.js';
 
 export const MAX_IMPORT_BYTES = 15 * 1024 * 1024;
 
@@ -561,16 +562,33 @@ function parseCredentials(lines) {
   return entries.map(({ _hasDetail, ...e }) => e).filter((e) => e.name);
 }
 
+// Common soft skills, matched on letters only ("Problem-Solving" = "problem solving").
+const SOFT_SKILLS = new Set([
+  'communication', 'clear communication', 'communication skills', 'verbal communication', 'written communication',
+  'oral and written communication', 'interpersonal skills', 'interpersonal', 'teamwork', 'team player', 'collaboration',
+  'leadership', 'adaptability', 'flexibility', 'problem solving', 'critical thinking', 'analytical thinking',
+  'decision making', 'time management', 'organization', 'organizational skills', 'multitasking', 'attention to detail',
+  'detail oriented', 'creativity', 'innovation', 'empathy', 'active listening', 'patience', 'customer service',
+  'customer focus', 'conflict resolution', 'negotiation', 'public speaking', 'presentation skills', 'emotional intelligence',
+  'work ethic', 'strong work ethic', 'reliability', 'dependability', 'dependable', 'punctuality', 'honesty', 'integrity',
+  'professionalism', 'respectfulness', 'respect', 'resilience', 'initiative', 'self motivated', 'self motivation',
+  'positive attitude', 'willingness to learn', 'eagerness to learn', 'quick learner', 'fast learner', 'coachable',
+  'hardworking', 'hard working', 'cooperative', 'stress management', 'working under pressure', 'accountability',
+  'resourcefulness', 'open mindedness', 'courtesy', 'friendliness', 'mentoring', 'coaching',
+].map(headingKey));
+const isSoftSkill = (s) => SOFT_SKILLS.has(headingKey(s));
+
 /** Heuristic resume parser → partial resume state. */
 export function parseResume(lines) {
   const sections = { header: [] };
   let current = 'header';
   let skillBucket = 'hard';
+  let skillsLabelled = false;
   const skills = { hard: [], soft: [] };
 
   for (const l of lines) {
     const head = headingOf(l.text);
-    if (head === 'hard' || head === 'soft') { current = 'skills'; skillBucket = head; continue; }
+    if (head === 'hard' || head === 'soft') { current = 'skills'; skillBucket = head; skillsLabelled = true; continue; }
     if (head && head !== 'responsibilities' && head !== 'accomplishments') {
       current = head;
       if (head === 'skills') skillBucket = 'hard';
@@ -581,15 +599,31 @@ export function parseResume(lines) {
     (sections[current] = sections[current] || []).push(l);
   }
 
+  // Chips are separated by wide gaps (\t); text lists by commas, semicolons, pipes or bullets.
+  // Separators inside brackets are kept: "MS Excel (Pivot Tables, VLOOKUP)".
   const splitSkills = (ls) =>
-    ls.flatMap((l) => l.text.replace(/^[A-Za-z /&]{3,30}:\s*/, '').split(/\t|[,;|•·]|\s{2,}/))
+    ls.flatMap((l) => {
+      const text = l.text.replace(/^[A-Za-z /&]{3,30}:\s*/, '').replace(/\s{2,}/g, '\t');
+      // A row of chips: each chip is one skill, even if it contains ";" or ",".
+      if (text.includes('\t')) return text.split('\t');
+      return splitTopLevel(text, ',;|•·');
+    })
       .map((s) => clean(s.replace(BULLET_RE, '')))
-      .filter((s) => s && s.length <= 60);
+      .filter((s) => s && s.length <= 80);
+
+  // Labelled lists ("Hard Skills" / "Soft Skills") are kept as they are. An unlabelled list is
+  // sorted item by item: recognised soft skills go to Soft, everything else to Hard.
+  let hard = splitSkills(skills.hard);
+  let soft = splitSkills(skills.soft);
+  if (!skillsLabelled) {
+    soft = hard.filter(isSoftSkill);
+    hard = hard.filter((s) => !isSoftSkill(s));
+  }
 
   return {
     personal: parseHeader(sections.header || []),
     summary: { text: clean((sections.summary || []).map((l) => l.text).join(' ')) },
-    skills: { hard: splitSkills(skills.hard).join(', '), soft: splitSkills(skills.soft).join(', ') },
+    skills: { hard: hard.join(', '), soft: soft.join(', ') },
     experience: parseExperience(sections.experience || []),
     education: parseEducation(sections.education || []),
     credentials: parseCredentials(sections.credentials || []),

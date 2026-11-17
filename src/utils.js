@@ -11,9 +11,28 @@ export function toLink(raw) {
   return { href, text };
 }
 
-/** Split comma- or newline-separated text into trimmed items. */
-export const splitList = (s) =>
-  String(s || '').split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+/**
+ * Split text on separator characters that are not inside brackets, so
+ * "MS Excel (Pivot Tables, VLOOKUP), SAP" → ["MS Excel (Pivot Tables, VLOOKUP)", "SAP"].
+ */
+export function splitTopLevel(s, separators = ',\n') {
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of String(s || '')) {
+    if ('([{'.includes(ch)) depth++;
+    else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1);
+    if (depth === 0 && separators.includes(ch)) {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+
+/** Split comma- or newline-separated text into trimmed items (commas inside brackets are kept). */
+export const splitList = (s) => splitTopLevel(s, ',\n');
 
 /** Split text into lines, dropping any bullet characters the user typed. */
 export const splitLines = (s) =>
