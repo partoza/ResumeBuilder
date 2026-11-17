@@ -8,7 +8,7 @@
 import { loadPdfjs } from './pdfjs.js';
 import { extractEmbedded } from './exportPdf.js';
 import { EXPERIENCE_TYPES, LINK_TYPES } from './data.js';
-import { COMPLIMENTARY_CLOSES, autoSalutation } from './letterData.js';
+import { COMPLIMENTARY_CLOSES, DEFAULT_GREETING, GREETINGS, autoSalutation } from './letterData.js';
 import { splitTopLevel } from './utils.js';
 
 export const MAX_IMPORT_BYTES = 15 * 1024 * 1024;
@@ -662,7 +662,7 @@ function paragraphs(lines) {
 /** Heuristic cover letter parser → partial letter state. */
 export function parseLetter(lines) {
   const texts = lines.map((l) => clean(l.text));
-  const salIdx = texts.findIndex((t) => /^(dear\b|to whom it may concern|good day)/i.test(t));
+  const salIdx = texts.findIndex((t) => /^(dear|to whom it may concern|good (day|morning|afternoon)|greetings|hello|hi)\b/i.test(t));
   const closeIdx = texts.findIndex((t, i) => i > salIdx && CLOSE_RE.test(t));
   const dateIdx = texts.findIndex((t, i) => (salIdx < 0 || i < salIdx) && LETTER_DATE_RE.test(t));
   const reIdx = texts.findIndex((t, i) => (salIdx < 0 || i < salIdx) && /^(re|subject|subj)\s*:/i.test(t));
@@ -684,16 +684,19 @@ export function parseLetter(lines) {
     recipient.address = block.slice(i).join(', ');
   }
 
-  const content = { position: '', salutation: '', opening: '', body: '', closing: '' };
+  const content = { position: '', greeting: DEFAULT_GREETING, salutation: '', opening: '', body: '', closing: '' };
   if (reIdx >= 0) {
     const re = texts[reIdx].replace(/^(re|subject|subj)\s*:\s*/i, '');
     content.position = clean(re.replace(/^(application|applying)\s+(for|as)\s+(the\s+)?(position\s+of\s+)?/i, '').replace(/\s+position$/i, ''));
   }
   if (salIdx >= 0) {
     const sal = texts[salIdx];
-    // Leave it blank (automatic) when it's what the app would write anyway, with "," or ":".
-    const bare = (x) => x.replace(/[,:]\s*$/, '').toLowerCase();
-    content.salutation = bare(sal) === bare(autoSalutation(recipient.name)) ? '' : sal;
+    // If it's exactly what one of the greeting options produces (ending in "," or ":"),
+    // select that greeting and keep the salutation automatic; otherwise keep it as written.
+    const bare = (x) => x.replace(/[,:]\s*$/, '').replace(/,/g, '').replace(/\s+/g, ' ').toLowerCase();
+    const greeting = GREETINGS.find((g) => bare(sal) === bare(autoSalutation(recipient.name, g)));
+    if (greeting) content.greeting = greeting;
+    else content.salutation = sal;
   }
 
   const bodyLines = lines.slice(salIdx >= 0 ? salIdx + 1 : recEnd, closeIdx >= 0 ? closeIdx : lines.length);

@@ -5,6 +5,10 @@ import { fullName, has } from './utils.js';
 
 export const COMPLIMENTARY_CLOSES = ['Sincerely,', 'Respectfully yours,', 'Very truly yours,', 'Best regards,'];
 
+/** Opening word(s) of the automatic salutation. "To Whom It May Concern" stands alone. */
+export const GREETINGS = ['Dear', 'Good day', 'Greetings', 'Hello', 'To Whom It May Concern'];
+export const DEFAULT_GREETING = 'Dear';
+
 /**
  * Font choices for the letter, like a word processor's font menu.
  * `pdf` is the jsPDF font: the three standard PDF fonts (Times, Helvetica = Arial
@@ -42,7 +46,11 @@ export const LETTER_SECTIONS = [
     kind: 'object',
     fields: [
       { key: 'position', label: 'Position applied for', placeholder: 'Junior Web Developer', full: true },
-      { key: 'salutation', label: 'Salutation', placeholder: 'Leave blank to use “Dear Ms. Santos,” or “Dear Hiring Manager,”', full: true },
+      { key: 'greeting', label: 'Greeting', type: 'select', options: GREETINGS },
+      {
+        key: 'salutation', label: 'Custom salutation (optional)', placeholder: 'e.g. Dear Search Committee,',
+        hint: 'Leave blank to use the greeting with the recipient’s name, e.g. “Dear Ms. Santos,” or “Dear Hiring Manager,”.',
+      },
       {
         key: 'opening', label: 'Opening paragraph', type: 'textarea', full: true,
         hint: 'Name the position, where you found it, and one line on why you’re a strong fit.',
@@ -81,7 +89,7 @@ export const todayIso = () => {
 export function blankLetter() {
   return {
     recipient: { date: todayIso(), name: '', title: '', company: '', address: '' },
-    content: { position: '', salutation: '', opening: '', body: '', closing: '' },
+    content: { position: '', greeting: DEFAULT_GREETING, salutation: '', opening: '', body: '', closing: '' },
     signoff: { name: '', complimentary: 'Sincerely,', enclosure: true },
     format: { ...DEFAULT_FORMAT },
   };
@@ -98,6 +106,7 @@ export function sampleLetter() {
     },
     content: {
       position: 'Junior Web Developer',
+      greeting: DEFAULT_GREETING,
       salutation: '',
       opening:
         'I am writing to apply for the Junior Web Developer position at Northwind Digital Inc., which I found on JobStreet. As a Cum Laude graduate in Information Technology with hands-on agency experience in React, I am confident I can help your team ship reliable, user-friendly web products from day one.',
@@ -114,18 +123,30 @@ export function sampleLetter() {
 const HONORIFIC = /^(mr|ms|mrs|miss|dr|engr|atty|prof|arch|hon)\.?$/i;
 const SURNAME_PARTICLE = /^(de|del|dela|della|delos|de los|da|di|san|sta\.?|sto\.?|van|von)$/i;
 
-/** "Ms. Patricia Lim" → "Dear Ms. Lim,"; no title → "Dear Patricia Lim,"; blank → "Dear Hiring Manager,". */
-export function autoSalutation(recipientName) {
+/** "Ms. Patricia Lim" → "Ms. Lim"; no title → "Patricia Lim"; blank → "Hiring Manager". */
+function addressee(recipientName) {
   const parts = String(recipientName || '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return 'Dear Hiring Manager,';
+  if (!parts.length) return 'Hiring Manager';
   if (parts.length > 2 && HONORIFIC.test(parts[0])) {
     const title = parts[0].replace(/\.?$/, '.');
     const rest = parts.slice(1);
     const particle = rest.findIndex((w, i) => i > 0 && i < rest.length - 1 && SURNAME_PARTICLE.test(w));
     const last = particle > 0 ? rest.slice(particle).join(' ') : rest[rest.length - 1];
-    return `Dear ${title.charAt(0).toUpperCase() + title.slice(1)} ${last},`;
+    return `${title.charAt(0).toUpperCase() + title.slice(1)} ${last}`;
   }
-  return `Dear ${parts.join(' ')},`;
+  return parts.join(' ');
+}
+
+/**
+ * Salutation from a greeting and the recipient's name:
+ * Dear → "Dear Ms. Lim,"   Good day → "Good day, Ms. Lim,"   Greetings → "Greetings, Ms. Lim,"
+ * Hello → "Hello Ms. Lim,"   To Whom It May Concern → "To Whom It May Concern,"
+ */
+export function autoSalutation(recipientName, greeting = DEFAULT_GREETING) {
+  const g = GREETINGS.includes(greeting) ? greeting : DEFAULT_GREETING;
+  if (g === 'To Whom It May Concern') return `${g},`;
+  const sep = g === 'Good day' || g === 'Greetings' ? ', ' : ' ';
+  return `${g}${sep}${addressee(recipientName)},`;
 }
 
 function formatLongDate(iso) {
@@ -161,7 +182,7 @@ export function buildLetterModel(personal, letter) {
     date: formatLongDate(r.date),
     recipient: [recipientName, r.title, r.company, r.address].map((x) => (x || '').trim()).filter(Boolean),
     subject: has(c.position) ? `Re: Application for ${c.position.trim()}` : '',
-    salutation: has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName),
+    salutation: has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName, c.greeting),
     paragraphs,
     complimentary: s.complimentary || 'Sincerely,',
     enclosure: s.enclosure ? 'Enclosure: Resume' : '',
