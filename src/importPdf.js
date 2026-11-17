@@ -480,6 +480,14 @@ const DEGREE_RE = /\b(bachelor|master|doctor|ph\.?d|b\.?s\.?|b\.?a\.?|m\.?s\.?|m
 const SCHOOL_RE = /\b(university|college|school|institute|academy|polytechnic|colegio|universidad|lyceum|ateneo|tesda)\b/i;
 const HONOR_RE = /\b(laude|honou?rs?|dean['’]?s list(er)?|valedictorian|salutatorian|scholar|with distinction|award(ee)?)\b/i;
 
+// A school level written as the program ("Senior High School - GAS Strand"), not a school name.
+const LEVEL_START_RE = /^(senior high|junior high|high school|secondary|elementary|primary|grade school|vocational|tech[- ]?voc)/i;
+
+/**
+ * Education entries. A title row with a right-aligned date ("Degree ⇥ June 2023") always
+ * starts a new entry; the next line is the institution, then honors. Without that layout,
+ * degree/school keywords decide.
+ */
 function parseEducation(lines) {
   const entries = [];
   let cur = null;
@@ -494,8 +502,15 @@ function parseEducation(lines) {
     else if (single) { date = single.date; t = single.rest; }
     if (!t && date) { if (cur && !cur.graduation) cur.graduation = date; continue; }
 
-    const isDegree = DEGREE_RE.test(t) && !SCHOOL_RE.test(t.split(/[|,·]/)[0]);
-    const isSchool = SCHOOL_RE.test(t);
+    if (date && l.text.includes('\t')) {
+      start();
+      cur.degree = t;
+      cur.graduation = date;
+      continue;
+    }
+
+    const isDegree = LEVEL_START_RE.test(t) || (DEGREE_RE.test(t) && !SCHOOL_RE.test(t.split(/[|,·]/)[0]));
+    const isSchool = !LEVEL_START_RE.test(t) && SCHOOL_RE.test(t);
     const isHonor = HONOR_RE.test(t) && t.length < 80;
 
     if (isHonor && cur && !isDegree) { cur.honors = cur.honors ? `${cur.honors}, ${t}` : t; continue; }
@@ -535,7 +550,10 @@ function parseCredentials(lines) {
     }
     let name = dated ? dated.rest || t : t;
     let issuer = '';
-    const split = /\s+[|·–—]\s+|\s+-\s+/.exec(name);
+    // "Name ⇥ Date" title rows keep the whole name (it may contain " - "); the issuer is on the
+    // next line. Single-line items ("• NC II - TESDA (2021)") carry the issuer after a dash.
+    const titleRow = dated && l.text.includes('\t');
+    const split = !titleRow && /\s+[|·–—]\s+|\s+-\s+/.exec(name);
     if (split) { issuer = clean(name.slice(split.index + split[0].length)); name = clean(name.slice(0, split.index)); }
     cur = { name, issuer, date: dated ? dated.date : '', number: '', _hasDetail: !!issuer };
     entries.push(cur);
