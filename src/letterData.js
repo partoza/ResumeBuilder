@@ -5,6 +5,22 @@ import { fullName, has } from './utils.js';
 
 export const COMPLIMENTARY_CLOSES = ['Sincerely,', 'Respectfully yours,', 'Very truly yours,', 'Best regards,'];
 
+/**
+ * Font choices for the letter, like a word processor's font menu.
+ * `pdf` is the jsPDF font: the three standard PDF fonts (Times, Helvetica = Arial
+ * metrics, Courier) or the embedded Inter. ascent/descent are in em, used to place
+ * the baseline inside a 1.15 line box exactly like the browser does.
+ */
+export const LETTER_FONTS = [
+  { name: 'Times New Roman', css: '"Times New Roman", Times, "Liberation Serif", serif', pdf: 'times', ascent: 0.891, descent: 0.216 },
+  { name: 'Arial', css: 'Arial, Helvetica, "Liberation Sans", sans-serif', pdf: 'helvetica', ascent: 0.905, descent: 0.212 },
+  { name: 'Courier New', css: '"Courier New", Courier, "Liberation Mono", monospace', pdf: 'courier', ascent: 0.833, descent: 0.3 },
+  { name: 'Inter', css: '"Inter", Arial, sans-serif', pdf: 'I400', ascent: 0.969, descent: 0.242 },
+];
+export const LETTER_SIZES = [10, 11, 12];
+export const DEFAULT_FORMAT = { font: 'Times New Roman', size: 12 };
+export const letterFont = (name) => LETTER_FONTS.find((f) => f.name === name) || LETTER_FONTS[0];
+
 export const LETTER_SECTIONS = [
   {
     id: 'recipient',
@@ -67,6 +83,7 @@ export function blankLetter() {
     recipient: { date: todayIso(), name: '', title: '', company: '', address: '' },
     content: { position: '', salutation: '', opening: '', body: '', closing: '' },
     signoff: { name: '', complimentary: 'Sincerely,', enclosure: true },
+    format: { ...DEFAULT_FORMAT },
   };
 }
 
@@ -90,6 +107,7 @@ export function sampleLetter() {
         'I would welcome the opportunity to discuss how my skills can support your development team. Thank you for your time and consideration. I look forward to hearing from you.',
     },
     signoff: { name: 'Andrea Reyes Villanueva', complimentary: 'Sincerely,', enclosure: true },
+    format: { ...DEFAULT_FORMAT },
   };
 }
 
@@ -135,8 +153,11 @@ export function buildLetterModel(personal, letter) {
     .map((x) => String(x || '').trim().replace(/\s*\n\s*/g, ' '))
     .filter(Boolean);
 
+  const format = letter.format || DEFAULT_FORMAT;
   return {
     name,
+    font: letterFont(format.font),
+    size: LETTER_SIZES.includes(Number(format.size)) ? Number(format.size) : DEFAULT_FORMAT.size,
     date: formatLongDate(r.date),
     recipient: [recipientName, r.title, r.company, r.address].map((x) => (x || '').trim()).filter(Boolean),
     subject: has(c.position) ? `Re: Application for ${c.position.trim()}` : '',

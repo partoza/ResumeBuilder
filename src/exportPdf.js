@@ -127,7 +127,9 @@ async function createPdf(kind, m) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   const plain = (s) => String(s ?? '');
   const T = fonts ? plain : pdfText;
-  if (fonts) {
+  // Only embed Inter when the document actually uses it (keeps letters in standard fonts small).
+  const needsInter = kind === 'resume' || m.font?.pdf === 'I400';
+  if (fonts && needsInter) {
     for (const [name, data] of fonts) {
       doc.addFileToVFS(`${name}.ttf`, data);
       doc.addFont(`${name}.ttf`, name, 'normal');
@@ -333,22 +335,26 @@ async function createPdf(kind, m) {
 
   /**
    * Standard business-letter format (mirrors .paper-letter styles):
-   * 1in margins, Times 12pt black, single-spaced (1.15), one blank line between
-   * parts and three blank lines for the signature. Times is a built-in PDF font,
-   * so text stays fully extractable for ATS.
+   * 1in margins, chosen font and size (default Times 12pt), black, single-spaced (1.15),
+   * one blank line between parts and three blank lines for the signature. Text is
+   * real PDF text in every font, so it stays extractable for ATS.
    */
   function drawLetter() {
-    const SIZE = 12;
+    const SIZE = m.size;
     const LINE = SIZE * 1.15 * PT; // single spacing
     const M = 25.4; // 1 inch
     const lx = M;
     const lw = PAGE.w - 2 * M;
     const lbottom = PAGE.h - M;
-    // Times ascent 0.891em, descent 0.216em, centred in the 1.15 line box.
-    const base = ((1.15 - 1.107) / 2 + 0.891) * SIZE * PT;
+    // Embedded Inter needs the font files; otherwise fall back to Arial-metric Helvetica.
+    const f = m.font.pdf === 'I400' && !fonts ? { pdf: 'helvetica', ascent: 0.905, descent: 0.212 } : m.font;
+    const builtIn = f.pdf !== 'I400';
+    const clean = builtIn ? pdfText : plain;
+    // Baseline position inside the 1.15 line box, matching the browser.
+    const base = ((1.15 - (f.ascent + f.descent)) / 2 + f.ascent) * SIZE * PT;
     let ly = M;
 
-    doc.setFont('times', 'normal');
+    doc.setFont(f.pdf, 'normal');
     doc.setFontSize(SIZE);
     doc.setTextColor(0, 0, 0);
 
@@ -360,7 +366,7 @@ async function createPdf(kind, m) {
       doc.text(str, lx, ly + base, { baseline: 'alphabetic' });
       ly += LINE;
     };
-    const lines = (str) => doc.splitTextToSize(pdfText(str), lw).forEach(line);
+    const lines = (str) => doc.splitTextToSize(clean(str), lw).forEach(line);
     const blank = (n = 1) => { ly += LINE * n; };
     let first = true;
     const part = (strs) => {

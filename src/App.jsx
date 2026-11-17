@@ -6,7 +6,7 @@ import { useConfirm } from './components/ConfirmDialog.jsx';
 import { Download, Logo, Moon, Sun, Swap } from './components/Icons.jsx';
 import { SECTIONS, blankState, sampleState } from './data.js';
 import {
-  LETTER_SECTIONS, blankLetter, buildLetterModel, letterHasContent, letterWordCount, sampleLetter,
+  LETTER_FONTS, LETTER_SECTIONS, LETTER_SIZES, blankLetter, buildLetterModel, letterHasContent, letterWordCount, sampleLetter,
 } from './letterData.js';
 import { fileName, sectionFilled, sectionHasContent, setIn } from './utils.js';
 import { buildModel } from './model.js';
@@ -172,7 +172,7 @@ export default function App() {
           confirmLabel: 'Replace with sample',
         }))
       ) return;
-      setLetter(sampleLetter());
+      setLetter((l) => ({ ...sampleLetter(), format: l.format }));
       notify('Sample cover letter loaded');
       return;
     }
@@ -202,7 +202,7 @@ export default function App() {
           danger: true,
         }))
       ) return;
-      setLetter(blankLetter());
+      setLetter((l) => ({ ...blankLetter(), format: l.format }));
       notify('Cover letter cleared');
       return;
     }
@@ -245,6 +245,59 @@ export default function App() {
   const stepZoom = (dir) => setZoom(Math.min(1.5, Math.max(0.3, Math.round((scale + dir * 0.1) * 10) / 10)));
 
   /* ---- download ---- */
+  /* ---- print: prints the exact PDF that Download saves ---- */
+  const [printing, setPrinting] = useState(false);
+  const buildPdf = () => (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
+  const printRef = useRef(null);
+  printRef.current = async function printPdf() {
+    if (printing) return;
+    setPrinting(true);
+    try {
+      const doc = await buildPdf();
+      const url = URL.createObjectURL(doc.output('blob'));
+      document.getElementById('print-frame')?.remove();
+      const frame = document.createElement('iframe');
+      frame.id = 'print-frame';
+      frame.title = 'Print preview';
+      // Must stay rendered (not display:none) for the browser's PDF viewer to load.
+      Object.assign(frame.style, {
+        position: 'fixed', right: '0', bottom: '0', width: '1px', height: '1px', border: '0', opacity: '0', pointerEvents: 'none',
+      });
+      frame.onload = () => {
+        setTimeout(() => {
+          try {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+          } catch {
+            // Some browsers can't print an embedded PDF: open it so they can print from the viewer.
+            window.open(url, '_blank', 'noopener');
+          }
+          setPrinting(false);
+        }, 300);
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+      };
+      frame.src = url;
+      document.body.appendChild(frame);
+    } catch (err) {
+      console.error(err);
+      notify('Could not prepare the document for printing');
+      setPrinting(false);
+    }
+  };
+  const printPdf = () => printRef.current();
+
+  // Ctrl/Cmd+P prints the PDF too, so the printout always matches the download.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        printRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   async function downloadPdf() {
     setBusy(true);
     try {
@@ -295,7 +348,9 @@ export default function App() {
           <button className="btn btn-ghost icon-only" title="Toggle theme" aria-label="Toggle dark mode" onClick={toggleTheme}>
             {theme === 'dark' ? <Moon /> : <Sun />}
           </button>
-          <button className="btn btn-secondary hide-sm" onClick={() => window.print()}>Print</button>
+          <button className="btn btn-secondary hide-sm" onClick={printPdf} disabled={printing}>
+            {printing ? 'Preparing…' : 'Print'}
+          </button>
           <button className="btn btn-primary" id="downloadBtn" onClick={downloadPdf} disabled={busy}>
             <Download size={15} />
             <span>{busy ? 'Generating…' : 'Download PDF'}</span>
@@ -369,6 +424,32 @@ export default function App() {
 
         <section className="pane pane-preview" aria-label={`${docInfo.tab} preview`}>
           <div className="preview-toolbar">
+            {isLetter && (
+              <div className="format-bar" role="group" aria-label="Letter formatting">
+                <select
+                  className="tool-select font"
+                  aria-label="Font"
+                  title="Font"
+                  value={letterModel.font.name}
+                  style={{ fontFamily: letterModel.font.css }}
+                  onChange={(e) => updateLetter(['format', 'font'], e.target.value)}
+                >
+                  {LETTER_FONTS.map((f) => (
+                    <option key={f.name} value={f.name} style={{ fontFamily: f.css }}>{f.name}</option>
+                  ))}
+                </select>
+                <select
+                  className="tool-select size"
+                  aria-label="Font size"
+                  title="Font size"
+                  value={letterModel.size}
+                  onChange={(e) => updateLetter(['format', 'size'], Number(e.target.value))}
+                >
+                  {LETTER_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="toolbar-right">
             <span className={`page-count${overLimit ? ' over' : ''}`}>
               A4 · {pages} {pages === 1 ? 'page' : 'pages'}
               {overLimit ? ` — over the ${docInfo.max}-page limit` : ` of ${docInfo.max} max`}
@@ -379,6 +460,7 @@ export default function App() {
               <span className="zoom-label">{Math.round(scale * 100) + '%'}</span>
               <button className="btn btn-ghost btn-xs" aria-label="Zoom in" onClick={() => stepZoom(1)}>+</button>
               <button className="btn btn-ghost btn-xs" onClick={() => setZoom('fit')}>Fit</button>
+            </div>
             </div>
           </div>
           <div className="preview-scroll" ref={scrollRef}>

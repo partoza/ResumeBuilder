@@ -1,13 +1,17 @@
 import { forwardRef } from 'react';
 
 /**
- * Standard block-format cover letter: 1" margins, Times New Roman 12pt, single-spaced,
+ * Standard block-format cover letter: 1" margins, chosen font (default Times New Roman 12pt), single-spaced,
  * one blank line between parts and three blank lines for the signature.
  * exportPdf.js (drawLetter) draws the identical layout.
  */
 const LetterPreview = forwardRef(function LetterPreview({ model: m, style }, ref) {
   return (
-    <article className="paper paper-letter" ref={ref} style={style}>
+    <article
+      className="paper paper-letter"
+      ref={ref}
+      style={{ ...style, fontFamily: m.font.css, fontSize: `${m.size}pt` }}
+    >
       <div className="r-letter">
         {m.date && <p className="l-date">{m.date}</p>}
 
