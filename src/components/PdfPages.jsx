@@ -18,7 +18,7 @@ const WORD_RE = /[A-Za-z][A-Za-z'’]*/g;
  * version:    changes whenever the content changes
  * misspelled: Set of words to underline (empty = none)
  */
-export default function PdfPages({ build, version, width, maxPages, onPageCount, onReady, misspelled, onReplace, onIgnore }) {
+export default function PdfPages({ build, version, width, maxPages, onPageCount, onReady, misspelled, onReplace, onIgnore, embeddedFonts = true }) {
   const [pages, setPages] = useState([]);
   const [menu, setMenu] = useState(null); // { word, rect }
   const job = useRef(0);
@@ -37,12 +37,13 @@ export default function PdfPages({ build, version, width, maxPages, onPageCount,
         cb.current.onPageCount?.(doc.getNumberOfPages());
         const lib = await loadPdfjs();
         if (id !== job.current) return;
-        // disableFontFace: draw glyphs as paths instead of registering each embedded
-        // font with the browser — ~10× faster for the Inter-based resume.
+        // Embedded fonts (Inter): draw glyphs as paths instead of registering each font
+        // with the browser — ~10× faster. Standard PDF fonts (Times, Helvetica, Courier)
+        // aren't embedded, so they must use the browser's fonts or nothing gets drawn.
         const pdf = await lib.getDocument({
           data: new Uint8Array(doc.output('arraybuffer')),
           isEvalSupported: false,
-          disableFontFace: true,
+          disableFontFace: embeddedFonts,
         }).promise;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const rendered = [];
@@ -84,7 +85,7 @@ export default function PdfPages({ build, version, width, maxPages, onPageCount,
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [version, width]);
+  }, [version, width, embeddedFonts]);
 
   // Underline misspelled words inside the text layers.
   useLayoutEffect(() => {

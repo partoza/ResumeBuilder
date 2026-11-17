@@ -103,7 +103,8 @@ export function documentText(kind, data, letter) {
     const c = letter.content;
     return {
       prose: [c.position, c.salutation, c.opening, c.body, c.closing, letter.signoff.complimentary],
-      names: [r.name, r.title, r.company, r.address, letter.signoff.name, data.personal.firstName, data.personal.middleName, data.personal.lastName],
+      // A custom greeting may be in another language ("Magandang araw") — never flag it.
+      names: [c.greetingOther, r.name, r.title, r.company, r.address, letter.signoff.name, data.personal.firstName, data.personal.middleName, data.personal.lastName],
     };
   }
   const p = data.personal;

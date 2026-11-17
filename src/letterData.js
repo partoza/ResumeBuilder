@@ -6,7 +6,7 @@ import { fullName, has } from './utils.js';
 export const COMPLIMENTARY_CLOSES = ['Sincerely,', 'Respectfully yours,', 'Very truly yours,', 'Best regards,'];
 
 /** Opening word(s) of the automatic salutation. "To Whom It May Concern" stands alone. */
-export const GREETINGS = ['Dear', 'Good day', 'Greetings', 'Hello', 'To Whom It May Concern'];
+export const GREETINGS = ['Dear', 'Good day', 'Greetings', 'Hello', 'To Whom It May Concern', 'Other'];
 export const DEFAULT_GREETING = 'Dear';
 
 /**
@@ -47,6 +47,11 @@ export const LETTER_SECTIONS = [
     fields: [
       { key: 'position', label: 'Position applied for', placeholder: 'Junior Web Developer', full: true },
       { key: 'greeting', label: 'Greeting', type: 'select', options: GREETINGS },
+      {
+        key: 'greetingOther', label: 'Your greeting', placeholder: 'e.g. Good morning, Hi, Magandang araw',
+        hint: 'Followed by the recipient’s name, e.g. “Good morning, Ms. Santos,”.',
+        showWhen: (c) => c.greeting === 'Other',
+      },
       {
         key: 'salutation', label: 'Custom salutation (optional)', placeholder: 'e.g. Dear Search Committee,',
         hint: 'Leave blank to use the greeting with the recipient’s name, e.g. “Dear Ms. Santos,” or “Dear Hiring Manager,”.',
@@ -89,7 +94,7 @@ export const todayIso = () => {
 export function blankLetter() {
   return {
     recipient: { date: todayIso(), name: '', title: '', company: '', address: '' },
-    content: { position: '', greeting: DEFAULT_GREETING, salutation: '', opening: '', body: '', closing: '' },
+    content: { position: '', greeting: DEFAULT_GREETING, greetingOther: '', salutation: '', opening: '', body: '', closing: '' },
     signoff: { name: '', complimentary: 'Sincerely,', enclosure: true },
     format: { ...DEFAULT_FORMAT },
   };
@@ -107,6 +112,7 @@ export function sampleLetter() {
     content: {
       position: 'Junior Web Developer',
       greeting: DEFAULT_GREETING,
+      greetingOther: '',
       salutation: '',
       opening:
         'I am writing to apply for the Junior Web Developer position at Northwind Digital Inc., which I found on JobStreet. As a Cum Laude graduate in Information Technology with hands-on agency experience in React, I am confident I can help your team ship reliable, user-friendly web products from day one.',
@@ -141,9 +147,14 @@ function addressee(recipientName) {
  * Salutation from a greeting and the recipient's name:
  * Dear → "Dear Ms. Lim,"   Good day → "Good day, Ms. Lim,"   Greetings → "Greetings, Ms. Lim,"
  * Hello → "Hello Ms. Lim,"   To Whom It May Concern → "To Whom It May Concern,"
+ * Other + "Good morning" → "Good morning, Ms. Lim,"
  */
-export function autoSalutation(recipientName, greeting = DEFAULT_GREETING) {
-  const g = GREETINGS.includes(greeting) ? greeting : DEFAULT_GREETING;
+export function autoSalutation(recipientName, greeting = DEFAULT_GREETING, other = '') {
+  if (greeting === 'Other') {
+    const custom = String(other || '').trim().replace(/[,:]+$/, '');
+    if (custom) return `${custom}, ${addressee(recipientName)},`;
+  }
+  const g = GREETINGS.includes(greeting) && greeting !== 'Other' ? greeting : DEFAULT_GREETING;
   if (g === 'To Whom It May Concern') return `${g},`;
   const sep = g === 'Good day' || g === 'Greetings' ? ', ' : ' ';
   return `${g}${sep}${addressee(recipientName)},`;
@@ -182,7 +193,7 @@ export function buildLetterModel(personal, letter) {
     date: formatLongDate(r.date),
     recipient: [recipientName, r.title, r.company, r.address].map((x) => (x || '').trim()).filter(Boolean),
     subject: has(c.position) ? `Re: Application for ${c.position.trim()}` : '',
-    salutation: has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName, c.greeting),
+    salutation: has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName, c.greeting, c.greetingOther),
     paragraphs,
     complimentary: s.complimentary || 'Sincerely,',
     enclosure: s.enclosure ? 'Enclosure: Resume' : '',

@@ -365,9 +365,10 @@ button { font: inherit; color: inherit; }
 
 /* ============ Preview ============ */
 .preview-toolbar {
-  height: 44px; flex: none;
+  min-height: 44px; flex: none;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 16px;
+  flex-wrap: wrap; gap: 6px 12px;
+  padding: 6px 16px;
   font-size: 12px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg) 80%, transparent);
@@ -377,9 +378,11 @@ button { font: inherit; color: inherit; }
 .page-count { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .page-count.over { color: var(--danger); font-weight: 500; }
 /* Docs-style formatting controls (cover letter) */
-.format-bar { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.toolbar-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.toolbar-right .page-count { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Font controls never shrink; when space runs out the right-hand group wraps below. */
+.format-bar { display: flex; align-items: center; gap: 6px; flex: none; }
+.toolbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex: 1 1 auto; min-width: 0; }
+.toolbar-right .spell-toggle, .toolbar-right .zoom { flex: none; }
+.toolbar-right .page-count { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 640px) {
   .format-bar + .toolbar-right .page-count { display: none; }
 }

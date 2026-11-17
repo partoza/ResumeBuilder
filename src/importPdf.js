@@ -685,7 +685,12 @@ function paragraphs(lines) {
 /** Heuristic cover letter parser → partial letter state. */
 export function parseLetter(lines) {
   const texts = lines.map((l) => clean(l.text));
-  const salIdx = texts.findIndex((t) => /^(dear|to whom it may concern|good (day|morning|afternoon)|greetings|hello|hi)\b/i.test(t));
+  let salIdx = texts.findIndex((t) => /^(dear|to whom it may concern|good (day|morning|afternoon)|greetings|hello|hi)\b/i.test(t));
+  // Any other greeting ("Magandang araw, Hiring Manager,"): the first short line ending in "," or ":".
+  if (salIdx < 0) {
+    salIdx = texts.findIndex((t, i) => i > 0 && t.length <= 70 && /[,:]$/.test(t) && !/[!?]/.test(t) && !/\.\s+[a-z]/.test(t)
+      && !CLOSE_RE.test(t) && !/^(re|subject|subj)\s*:/i.test(t));
+  }
   const closeIdx = texts.findIndex((t, i) => i > salIdx && CLOSE_RE.test(t));
   const dateIdx = texts.findIndex((t, i) => (salIdx < 0 || i < salIdx) && LETTER_DATE_RE.test(t));
   const reIdx = texts.findIndex((t, i) => (salIdx < 0 || i < salIdx) && /^(re|subject|subj)\s*:/i.test(t));
@@ -701,13 +706,15 @@ export function parseLetter(lines) {
   const isCompany = (t) => /\b(inc\.?|corp\.?|corporation|company|co\.|ltd\.?|llc|enterprises?|group|solutions|services|bank|university|college|hospital|agency|digital|technologies|foundation)\b/i.test(t);
   if (block.length) {
     let i = 0;
-    if (!isCompany(block[0]) && !ADDRESS_HINT.test(block[0])) recipient.name = block[i++];
+    const isJobTitle = (t) => !/^(mr|ms|mrs|miss|dr|engr|atty|prof)\.?\s/i.test(t)
+      && /\b(manager|officer|director|head|supervisor|specialist|coordinator|recruiter|hr|human resources|lead|assistant|associate|committee|department|president|ceo|cto|owner|principal|dean|chair(person)?|administrator|executive)\b/i.test(t);
+    if (!isCompany(block[0]) && !ADDRESS_HINT.test(block[0]) && !isJobTitle(block[0])) recipient.name = block[i++];
     if (block[i] && !isCompany(block[i]) && !ADDRESS_HINT.test(block[i]) && block[i].length < 60) recipient.title = block[i++];
     if (block[i] && !ADDRESS_HINT.test(block[i]) || block[i] && isCompany(block[i])) recipient.company = block[i++];
     recipient.address = block.slice(i).join(', ');
   }
 
-  const content = { position: '', greeting: DEFAULT_GREETING, salutation: '', opening: '', body: '', closing: '' };
+  const content = { position: '', greeting: DEFAULT_GREETING, greetingOther: '', salutation: '', opening: '', body: '', closing: '' };
   if (reIdx >= 0) {
     const re = texts[reIdx].replace(/^(re|subject|subj)\s*:\s*/i, '');
     content.position = clean(re.replace(/^(application|applying)\s+(for|as)\s+(the\s+)?(position\s+of\s+)?/i, '').replace(/\s+position$/i, ''));
@@ -717,8 +724,14 @@ export function parseLetter(lines) {
     // If it's exactly what one of the greeting options produces (ending in "," or ":"),
     // select that greeting and keep the salutation automatic; otherwise keep it as written.
     const bare = (x) => x.replace(/[,:]\s*$/, '').replace(/,/g, '').replace(/\s+/g, ' ').toLowerCase();
-    const greeting = GREETINGS.find((g) => bare(sal) === bare(autoSalutation(recipient.name, g)));
+    const greeting = GREETINGS.find((g) => g !== 'Other' && bare(sal) === bare(autoSalutation(recipient.name, g)));
+    // "<own greeting>, <recipient>," (e.g. "Good morning, Ms. Lim,") → Other + that greeting.
+    const body = sal.replace(/[,:]\s*$/, '').trim();
+    const addressees = [autoSalutation(recipient.name, 'Dear').replace(/^Dear\s+/, '').replace(/,$/, ''), 'Hiring Manager'];
+    const addr = !greeting && addressees.find((a) => body.toLowerCase().endsWith(a.toLowerCase()));
+    const prefix = addr ? body.slice(0, body.length - addr.length).replace(/[\s,]+$/, '').trim() : '';
     if (greeting) content.greeting = greeting;
+    else if (prefix && prefix.length <= 40) { content.greeting = 'Other'; content.greetingOther = prefix; }
     else content.salutation = sal;
   }
 

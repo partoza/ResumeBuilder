@@ -46,7 +46,7 @@ function ObjectBody({ section, data, update, notify }) {
       <PhotoPicker photo={data.photo} onChange={(v) => update([section.id, 'photo'], v)} notify={notify} />
     )}
     <div className="grid">
-      {section.fields.map((f) => (
+      {section.fields.filter((f) => !f.showWhen || f.showWhen(data)).map((f) => (
         <Field
           key={f.key}
           field={f}

@@ -690,6 +690,7 @@ export default function App() {
                 maxPages={docInfo.max}
                 onPageCount={setPages}
                 onReady={(ok) => setPdfView({ tab: docTab, ok })}
+                embeddedFonts={!isLetter || letterModel.font.pdf === 'I400'}
                 misspelled={misspelled}
                 onReplace={fixWord}
                 onIgnore={ignoreSpelling}
