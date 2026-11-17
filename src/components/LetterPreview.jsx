@@ -30,13 +30,14 @@ const LetterPreview = forwardRef(function LetterPreview({ model: m, style }, ref
         <p className="l-block">{m.salutation}</p>
 
         {m.paragraphs.length > 0 ? (
-          m.paragraphs.map((p, i) => <p key={i} className="l-block">{p}</p>)
+          m.paragraphs.map((p, i) => <p key={i} className="l-block l-para" style={{ textAlign: m.align }}>{p}</p>)
         ) : (
           <p className="l-block r-placeholder">Your opening, body and closing paragraphs will appear here.</p>
         )}
 
         <p className="l-block">{m.complimentary}</p>
-        <p className={`l-name${m.name ? '' : ' r-placeholder'}`}>{m.name || 'Your Name'}</p>
+        <p className={`l-name${m.nameBold ? ' l-bold' : ''}${m.name ? '' : ' r-placeholder'}`}>{m.name || 'Your Name'}</p>
+        {m.signatureTitle && <p className="l-sig-title">{m.signatureTitle}</p>}
 
         {m.enclosure && <p className="l-block">{m.enclosure}</p>}
       </div>

@@ -749,13 +749,19 @@ export function parseLetter(lines) {
     content.body = paras.slice(1, -1).join('\n\n');
   }
 
-  const signoff = { name: '', complimentary: 'Sincerely,', enclosure: false };
+  const signoff = { name: '', nameBold: true, showTitle: false, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false };
   if (closeIdx >= 0) {
     const close = texts[closeIdx].replace(/,?$/, ',');
     signoff.complimentary = COMPLIMENTARY_CLOSES.find((c) => c.toLowerCase() === close.toLowerCase()) || 'Sincerely,';
     const after = texts.slice(closeIdx + 1).filter(Boolean);
     const nameLine = after.find((t) => !/^enclosures?\s*:/i.test(t) && !EMAIL_RE.test(t) && !PHONE_RE.test(t));
     if (nameLine && nameLine.length < 60) signoff.name = nameLine;
+    // A short line right under the name ("Applicant", "Job Applicant") is the signature title.
+    const titleLine = nameLine ? after[after.indexOf(nameLine) + 1] : '';
+    if (titleLine && titleLine.length <= 40 && !/^enclosures?\s*:/i.test(titleLine) && !EMAIL_RE.test(titleLine) && !PHONE_RE.test(titleLine)) {
+      signoff.showTitle = true;
+      signoff.title = titleLine;
+    }
     signoff.enclosure = after.some((t) => /^enclosures?\s*:/i.test(t));
   }
 

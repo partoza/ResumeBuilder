@@ -22,7 +22,8 @@ export const LETTER_FONTS = [
   { name: 'Inter', css: '"Inter", Arial, sans-serif', pdf: 'I400', ascent: 0.969, descent: 0.242 },
 ];
 export const LETTER_SIZES = [10, 11, 12];
-export const DEFAULT_FORMAT = { font: 'Times New Roman', size: 12 };
+export const LETTER_ALIGNS = ['left', 'center', 'right', 'justify'];
+export const DEFAULT_FORMAT = { font: 'Times New Roman', size: 12, align: 'left' };
 export const letterFont = (name) => LETTER_FONTS.find((f) => f.name === name) || LETTER_FONTS[0];
 
 export const LETTER_SECTIONS = [
@@ -76,11 +77,14 @@ export const LETTER_SECTIONS = [
   {
     id: 'signoff',
     title: 'Sign-off',
-    desc: 'Complimentary close, your name and enclosure note.',
+    desc: 'Complimentary close, your name, a line under it, and the enclosure note.',
     kind: 'object',
     fields: [
-      { key: 'name', label: 'Name in signature', placeholder: 'Uses your name from the Resume tab if blank', full: true },
       { key: 'complimentary', label: 'Complimentary close', type: 'select', options: COMPLIMENTARY_CLOSES, full: true },
+      { key: 'name', label: 'Name in signature', placeholder: 'Uses your name from the Resume tab if blank', full: true },
+      { key: 'nameBold', label: 'Bold name', type: 'checkbox', full: true },
+      { key: 'showTitle', label: 'Add a line under your name', type: 'checkbox', full: true },
+      { key: 'title', label: 'Line under your name', placeholder: 'Applicant', full: true, showWhen: (s) => s.showTitle },
       { key: 'enclosure', label: 'Add “Enclosure: Resume” below the signature', type: 'checkbox', full: true },
     ],
   },
@@ -95,7 +99,7 @@ export function blankLetter() {
   return {
     recipient: { date: todayIso(), name: '', title: '', company: '', address: '' },
     content: { position: '', greeting: DEFAULT_GREETING, greetingOther: '', salutation: '', opening: '', body: '', closing: '' },
-    signoff: { name: '', complimentary: 'Sincerely,', enclosure: true },
+    signoff: { name: '', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: true },
     format: { ...DEFAULT_FORMAT },
   };
 }
@@ -121,7 +125,7 @@ export function sampleLetter() {
       closing:
         'I would welcome the opportunity to discuss how my skills can support your development team. Thank you for your time and consideration. I look forward to hearing from you.',
     },
-    signoff: { name: 'Andrea Reyes Villanueva', complimentary: 'Sincerely,', enclosure: true },
+    signoff: { name: 'Andrea Reyes Villanueva', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: true },
     format: { ...DEFAULT_FORMAT },
   };
 }
@@ -190,12 +194,15 @@ export function buildLetterModel(personal, letter) {
     name,
     font: letterFont(format.font),
     size: LETTER_SIZES.includes(Number(format.size)) ? Number(format.size) : DEFAULT_FORMAT.size,
+    align: LETTER_ALIGNS.includes(format.align) ? format.align : 'left',
     date: formatLongDate(r.date),
     recipient: [recipientName, r.title, r.company, r.address].map((x) => (x || '').trim()).filter(Boolean),
     subject: has(c.position) ? `Re: Application for ${c.position.trim()}` : '',
     salutation: has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName, c.greeting, c.greetingOther),
     paragraphs,
     complimentary: s.complimentary || 'Sincerely,',
+    nameBold: s.nameBold !== false,
+    signatureTitle: s.showTitle ? (s.title || '').trim() : '',
     enclosure: s.enclosure ? 'Enclosure: Resume' : '',
   };
 }

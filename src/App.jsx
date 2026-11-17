@@ -6,7 +6,14 @@ import { useConfirm } from './components/ConfirmDialog.jsx';
 import Select from './components/Select.jsx';
 import PdfPages from './components/PdfPages.jsx';
 import { documentText, findMisspellings, ignoreWord, preloadSpellcheck, replaceWordIn } from './spellcheck.js';
-import { Download, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Download, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
+
+const ALIGN_BUTTONS = [
+  ['left', 'Align left', AlignLeft],
+  ['center', 'Center', AlignCenter],
+  ['right', 'Align right', AlignRight],
+  ['justify', 'Justify', AlignJustify],
+];
 import { SECTIONS, blankState, sampleState } from './data.js';
 import {
   LETTER_FONTS, LETTER_SECTIONS, LETTER_SIZES, blankLetter, buildLetterModel, letterHasContent, letterWordCount, sampleLetter,
@@ -645,6 +652,22 @@ export default function App() {
                   options={LETTER_SIZES.map((n) => ({ value: n, label: String(n) }))}
                   onChange={(v) => updateLetter(['format', 'size'], Number(v))}
                 />
+                <div className="align-group" role="radiogroup" aria-label="Paragraph alignment">
+                  {ALIGN_BUTTONS.map(([value, label, Icon]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={letterModel.align === value}
+                      aria-label={label}
+                      title={`${label} (paragraphs)`}
+                      className={`align-btn${letterModel.align === value ? ' is-active' : ''}`}
+                      onClick={() => updateLetter(['format', 'align'], value)}
+                    >
+                      <Icon size={15} />
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             <div className="toolbar-right">

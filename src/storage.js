@@ -107,7 +107,7 @@ export function hydrateLetter(saved) {
 }
 
 const formatChanged = (l) =>
-  l.format && (l.format.font !== DEFAULT_FORMAT.font || Number(l.format.size) !== DEFAULT_FORMAT.size);
+  l.format && (l.format.font !== DEFAULT_FORMAT.font || Number(l.format.size) !== DEFAULT_FORMAT.size || (l.format.align || 'left') !== DEFAULT_FORMAT.align);
 
 export function saveLetter(l) {
   if (!letterHasContent(l) && !formatChanged(l)) {

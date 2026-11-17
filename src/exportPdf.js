@@ -397,19 +397,40 @@ async function createPdf(kind, m, { source } = {}) {
     const base = ((1.15 - (f.ascent + f.descent)) / 2 + f.ascent) * SIZE * PT;
     let ly = M;
 
-    doc.setFont(f.pdf, 'normal');
+    // Regular or bold in the chosen font (embedded Inter uses its Bold face).
+    const setStyle = (bold = false) => {
+      if (builtIn) doc.setFont(f.pdf, bold ? 'bold' : 'normal');
+      else doc.setFont(bold ? 'I700' : 'I400', 'normal');
+    };
+    setStyle(false);
     doc.setFontSize(SIZE);
     doc.setTextColor(0, 0, 0);
 
-    const line = (str) => {
+    /** One line of text, aligned; "justify" spreads words to both margins (not on a paragraph's last line). */
+    const line = (str, align = 'left', last = true) => {
       if (ly + LINE > lbottom + 0.01) {
         doc.addPage();
         ly = M;
       }
-      doc.text(str, lx, ly + base, { baseline: 'alphabetic' });
+      const y = ly + base;
+      const words = str.split(' ').filter(Boolean);
+      if (align === 'justify' && !last && words.length > 1) {
+        const widths = words.map((w) => doc.getTextWidth(w));
+        const gap = (lw - widths.reduce((a, b) => a + b, 0)) / (words.length - 1);
+        let x = lx;
+        words.forEach((w, i) => {
+          doc.text(w, x, y, { baseline: 'alphabetic' });
+          x += widths[i] + gap;
+        });
+      } else if (align === 'center') doc.text(str, lx + lw / 2, y, { baseline: 'alphabetic', align: 'center' });
+      else if (align === 'right') doc.text(str, lx + lw, y, { baseline: 'alphabetic', align: 'right' });
+      else doc.text(str, lx, y, { baseline: 'alphabetic' });
       ly += LINE;
     };
-    const lines = (str) => doc.splitTextToSize(clean(str), lw).forEach(line);
+    const lines = (str, align = 'left') => {
+      const ls = doc.splitTextToSize(clean(str), lw);
+      ls.forEach((l, i) => line(l, align, i === ls.length - 1));
+    };
     const blank = (n = 1) => { ly += LINE * n; };
     let first = true;
     const part = (strs) => {
@@ -422,16 +443,25 @@ async function createPdf(kind, m, { source } = {}) {
     if (m.recipient.length) part(m.recipient);
     if (m.subject) part([m.subject]);
     part([m.salutation]);
-    m.paragraphs.forEach((para) => part([para]));
-    // Keep the close, signature space and name together on one page.
-    if (ly + LINE * 6 > lbottom) {
+    for (const para of m.paragraphs) {
+      if (!first) blank();
+      first = false;
+      lines(para, m.align);
+    }
+    // Keep the close, signature space, name and title together on one page.
+    if (ly + LINE * 7 > lbottom) {
       doc.addPage();
       ly = M;
       first = true;
     }
     part([m.complimentary]);
     blank(3);
-    if (m.name) lines(m.name);
+    if (m.name) {
+      setStyle(m.nameBold);
+      lines(m.name);
+      setStyle(false);
+    }
+    if (m.signatureTitle) lines(m.signatureTitle);
     if (m.enclosure) part([m.enclosure]);
   }
 
