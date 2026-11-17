@@ -65,6 +65,15 @@ export function checkPhone(value) {
   return { level: 'warn', text: 'Use 09XX XXX XXXX or +63 9XX XXX XXXX.' };
 }
 
+export function checkUrl(value) {
+  const v = String(value || '').trim();
+  if (!v) return null;
+  if (/\s/.test(v) || !/^(https?:\/\/)?[^\s/]+\.[^\s/]{2,}/i.test(v)) {
+    return { level: 'warn', text: 'Enter a web address like linkedin.com/in/yourname or yoursite.com.' };
+  }
+  return null;
+}
+
 export function checkEmail(value) {
   const v = String(value || '').trim();
   if (!v || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return null;

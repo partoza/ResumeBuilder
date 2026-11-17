@@ -12,6 +12,9 @@ import {
 import { fileName, sectionFilled, sectionHasContent, setIn } from './utils.js';
 import { buildModel } from './model.js';
 import { LETTER_MAX_PAGES, MAX_PAGES, createLetterPdf, createResumePdf, preloadPdfAssets } from './exportPdf.js';
+import {
+  clearLetter, clearResume, loadLetter, loadResume, loadUi, saveLetter, saveResume, saveUi,
+} from './storage.js';
 
 const PAPER_W = 794; // A4 width in CSS px at 96 dpi
 
@@ -70,14 +73,14 @@ const DOCS = {
   resume: {
     tab: 'Resume Builder',
     heading: 'Build your resume',
-    intro: 'Answer the fields below in your own words — the preview formats them into an ATS-friendly resume. Nothing is stored; download your PDF when you’re done.',
+    intro: 'Answer the fields below in your own words — the preview formats them into an ATS-friendly resume. Everything you type is saved in this browser automatically.',
     max: MAX_PAGES,
     fileLabel: 'Resume',
   },
   letter: {
     tab: 'Cover Letter Builder',
     heading: 'Write your cover letter',
-    intro: 'A standard block-format business letter: date, recipient, three short paragraphs and your sign-off. Keep it to one page.',
+    intro: 'A standard block-format business letter: date, recipient, three short paragraphs and your sign-off. Keep it to one page. Saved in this browser automatically.',
     max: LETTER_MAX_PAGES,
     fileLabel: 'Cover_Letter',
   },
@@ -85,11 +88,13 @@ const DOCS = {
 
 /* ------------------------------- App ------------------------------- */
 export default function App() {
-  const [data, setData] = useState(() => withAllIds(blankState()));
-  const [letter, setLetter] = useState(blankLetter);
-  const [docTab, setDocTab] = useState('resume');
+  // Restore whatever was saved in this browser (falls back to blank forms).
+  const [initialUi] = useState(loadUi);
+  const [data, setData] = useState(() => withAllIds(loadResume()));
+  const [letter, setLetter] = useState(loadLetter);
+  const [docTab, setDocTab] = useState(initialUi.docTab);
   const [collapsed, setCollapsed] = useState(() => new Set());
-  const [swap, setSwap] = useState(false);
+  const [swap, setSwap] = useState(initialUi.swap);
   const [view, setView] = useState('edit'); // mobile only
   const [zoom, setZoom] = useState('fit');
   const [scale, setScale] = useState(1);
@@ -99,9 +104,57 @@ export default function App() {
   const [notify, toastView] = useToast();
   const [confirm, confirmDialog] = useConfirm();
 
+  /* ---- auto-save to this browser ---- */
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saving' | 'saved' | 'error'
+  const latest = useRef({ data, letter });
+  latest.current = { data, letter };
+  const dirty = useRef(false);
+  const warnedStorage = useRef(false);
+
+  const flushSave = useCallback(() => {
+    if (!dirty.current) return;
+    dirty.current = false;
+    const ok = saveResume(latest.current.data) && saveLetter(latest.current.letter);
+    setSaveStatus(ok ? 'saved' : 'error');
+    if (!ok && !warnedStorage.current) {
+      warnedStorage.current = true;
+      notify('Couldn’t save in this browser — storage is full or blocked. Download your PDF to keep your work.');
+    }
+  }, [notify]);
+
+  // Save the latest edit shortly after typing stops…
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    dirty.current = true;
+    setSaveStatus('saving');
+    const t = setTimeout(flushSave, 400);
+    return () => clearTimeout(t);
+  }, [data, letter, flushSave]);
+
+  // …and immediately when the tab is hidden, switched away from (Alt+Tab) or closed.
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flushSave(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flushSave);
+    window.addEventListener('blur', flushSave);
+    window.addEventListener('beforeunload', flushSave);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flushSave);
+      window.removeEventListener('blur', flushSave);
+      window.removeEventListener('beforeunload', flushSave);
+    };
+  }, [flushSave]);
+
   const paperRef = useRef(null);
   const scrollRef = useRef(null);
   const formScrollRef = useRef(null);
+
+  useEffect(() => { saveUi({ docTab, swap }); }, [docTab, swap]);
 
   const isLetter = docTab === 'letter';
   const docInfo = DOCS[docTab];
@@ -198,12 +251,13 @@ export default function App() {
       if (
         !(await confirm({
           title: 'Clear the cover letter?',
-          description: 'The recipient, letter text and sign-off will be emptied. Your resume isn’t affected. This can’t be undone.',
+          description: 'The recipient, letter text and sign-off will be emptied and removed from this browser. Your resume isn’t affected. This can’t be undone.',
           confirmLabel: 'Clear letter',
           danger: true,
         }))
       ) return;
       setLetter((l) => ({ ...blankLetter(), format: l.format }));
+      clearLetter();
       notify('Cover letter cleared');
       return;
     }
@@ -214,12 +268,13 @@ export default function App() {
     if (
       !(await confirm({
         title: 'Clear all fields?',
-        description: 'Every section will be emptied, including your photo. This can’t be undone.',
+        description: 'Every section will be emptied, including your photo, and the copy saved in this browser is deleted. This can’t be undone.',
         confirmLabel: 'Clear all',
         danger: true,
       }))
     ) return;
     setData(withAllIds(blankState()));
+    clearResume();
     notify('All fields cleared');
   }
 
@@ -383,6 +438,9 @@ export default function App() {
               <div className="intro-actions">
                 <button className="btn btn-secondary btn-sm" onClick={loadSample}>Load sample</button>
                 <button className="btn btn-ghost btn-sm danger" onClick={clearAll}>Clear all</button>
+                <span className={`save-status is-${saveStatus}`} role="status" aria-live="polite">
+                  {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Not saved' : 'Saved in this browser'}
+                </span>
               </div>
             </div>
 

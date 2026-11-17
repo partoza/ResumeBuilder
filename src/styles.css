@@ -201,7 +201,19 @@ button { font: inherit; color: inherit; }
 .form-inner { max-width: 680px; margin: 0 auto; padding: 32px 28px 48px; }
 .form-intro h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; margin: 0 0 6px; }
 .form-intro p { margin: 0; color: var(--fg-muted); }
-.intro-actions { display: flex; gap: 8px; margin-top: 16px; }
+.intro-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.save-status {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--fg-subtle);
+}
+.save-status::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--success); transition: background .2s ease;
+}
+.save-status.is-saving::before { background: var(--fg-subtle); }
+.save-status.is-error { color: var(--danger); }
+.save-status.is-error::before { background: var(--danger); }
 .form { margin-top: 28px; display: flex; flex-direction: column; gap: 16px; }
 
 .card {
@@ -399,7 +411,10 @@ button { font: inherit; color: inherit; }
 .r-name { font-size: 26pt; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em; margin: 0; }
 .r-role { font-size: 11.5pt; color: var(--ink-2); margin-top: 6px; font-weight: 500; }
 .r-contact { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 12px; font-size: 9.5pt; color: var(--ink-2); }
-.r-contact span { display: inline-flex; align-items: center; gap: 6px; }
+.r-contact span, .r-contact a { display: inline-flex; align-items: center; gap: 6px; }
+.r-contact a, .r-extra a { color: inherit; text-decoration: none; }
+.r-contact a:hover, .r-extra a:hover { text-decoration: underline; }
+.r-extra { font-size: 9.5pt; color: var(--ink-3); }
 .r-contact svg { flex: none; color: var(--ink-3); }
 .r-photo { width: 1.5in; height: 1.5in; flex: none; object-fit: cover; border: 1px solid var(--rule); }
 

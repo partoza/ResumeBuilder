@@ -1,12 +1,12 @@
 # Resume Builder
 
-A frontend-only resume builder for Philippine job seekers. Fill in the form on one side, see a live A4 preview on the other, and download a polished PDF. No account, no backend, no database — nothing leaves the browser.
+A frontend-only resume builder for Philippine job seekers. Fill in the form on one side, see a live A4 preview on the other, and download a polished PDF. No account, no backend, no database — nothing leaves the browser. Your inputs are auto-saved to the browser's local storage (instantly when you switch tabs or apps) and removed when you click **Clear all**.
 
 ## Features
 
 - **Split 50/50 layout** — form and live preview side by side (swap sides with one click); Edit / Preview tabs on mobile.
 - **Clean, minimal UI** — Inter font, black-and-white design, light and dark themes.
-- **Resume sections** — Header (with optional 2×2 photo), Summary Statement, Skills, Experience (Work, OJT, Apprenticeship, School Projects) with Job Responsibilities and Accomplishments, Education, and Certifications & Licenses.
+- **Resume sections** — Header (with optional 2×2 photo and one profile link: LinkedIn, Facebook, GitHub, portfolio or website — clickable in the PDF), Summary Statement, Skills, Experience (Work, OJT, Apprenticeship, School Projects) with Job Responsibilities, Accomplishments and optional company website and reference, Education, and Certifications & Licenses.
 - **No discriminatory personal data** — age, birthdate, sex, religion, civil status and nationality are intentionally left out.
 - **Built-in coaching** — flags weak bullet openers ("Responsible for…", "Helped…"), accomplishments without numbers, summaries outside 2–3 sentences, and invalid ZIP / phone / email formats.
 - **2-page limit indicator** — shows the real PDF page count and warns when the resume runs over.

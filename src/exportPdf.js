@@ -74,6 +74,11 @@ const ICON_SVG = {
   phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.1 9.9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
   pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  linkedin: '<path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/>',
+  facebook: '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>',
+  github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-8-2"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
 };
 
 let iconsPromise = null;
@@ -309,7 +314,7 @@ async function createPdf(kind, m) {
     const rowH = lh(9.5);
     let x = left;
     font('I400', 9.5, INK2);
-    for (const { type, text: value } of m.contact) {
+    for (const { type, text: value, href } of m.contact) {
       const lines = wrap(value, textW - icon - iconGap);
       const w = icon + iconGap + Math.max(...lines.map((l) => doc.getTextWidth(l)));
       if (x > left && x + w > left + textW + 0.01) {
@@ -318,7 +323,11 @@ async function createPdf(kind, m) {
       }
       if (icons[type]) doc.addImage(icons[type], 'PNG', x, y + (rowH - icon) / 2, icon, icon);
       font('I400', 9.5, INK2);
-      lines.forEach((ln, i) => text(ln, x + icon + iconGap, y + i * rowH, 9.5));
+      lines.forEach((ln, i) => {
+        text(ln, x + icon + iconGap, y + i * rowH, 9.5);
+        // Clickable area over the icon and text.
+        if (href) doc.link(i === 0 ? x : x + icon + iconGap, y + i * rowH, (i === 0 ? icon + iconGap : 0) + doc.getTextWidth(ln), rowH, { url: href });
+      });
       if (lines.length > 1) {
         y += (lines.length - 1) * rowH;
         x = left + textW; // force the next item onto a new row
@@ -428,6 +437,20 @@ async function createPdf(kind, m) {
       ensure(e.responsibilities.length || e.accomplishments.length ? 24 : lh(10.5) + lh(10));
       titleRow(e.role, e.dates);
       if (e.meta) paragraph(e.meta, 10);
+      if (e.website || e.reference) {
+        const sep = ' · ';
+        const line = [e.website?.text, e.reference && `Reference: ${e.reference}`].filter(Boolean).join(sep);
+        font('I400', 9.5, INK3);
+        wrap(line, width).forEach((ln, i) => {
+          ensure(lh(9.5));
+          text(ln, left, y, 9.5);
+          if (i === 0 && e.website) {
+            const w = Math.min(doc.getTextWidth(T(e.website.text)), width);
+            doc.link(left, y, w, lh(9.5), { url: e.website.href });
+          }
+          y += lh(9.5);
+        });
+      }
       if (e.responsibilities.length) {
         level(SUBHEADINGS.responsibilities);
         bullets(e.responsibilities);

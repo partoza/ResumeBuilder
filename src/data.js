@@ -1,14 +1,17 @@
 // Form schema and starting data for the resume.
 // Deliberately excludes age, birthdate, sex, religion, civil status and nationality.
-import { checkEmail, checkMeasurable, checkPhone, checkSummary, checkVerbs, checkZip } from './coach.js';
+import { checkEmail, checkMeasurable, checkPhone, checkSummary, checkUrl, checkVerbs, checkZip } from './coach.js';
 
 export const EXPERIENCE_TYPES = ['Work Experience', 'OJT / Internship', 'Apprenticeship', 'School Project'];
+
+/** One optional professional link in the header; the type picks the icon. */
+export const LINK_TYPES = ['LinkedIn', 'Facebook', 'GitHub', 'Portfolio', 'Website', 'Other'];
 
 export const SECTIONS = [
   {
     id: 'personal',
     title: 'Header',
-    desc: 'Photo, name, address with ZIP code, contact number and email.',
+    desc: 'Photo, name, address with ZIP code, contact number, email and one link.',
     kind: 'object',
     photo: true,
     fields: [
@@ -21,6 +24,11 @@ export const SECTIONS = [
       { key: 'zip', label: 'ZIP code', placeholder: '1100', ac: 'postal-code', inputMode: 'numeric', check: checkZip },
       { key: 'phone', label: 'Contact number', type: 'tel', placeholder: '0917 123 4567', ac: 'tel', check: checkPhone },
       { key: 'email', label: 'Email address', type: 'email', placeholder: 'juan.delacruz@email.com', ac: 'email', full: true, check: checkEmail },
+      { key: 'linkType', label: 'Link type', type: 'select', options: LINK_TYPES },
+      {
+        key: 'link', label: 'Profile link (optional)', type: 'url', placeholder: 'linkedin.com/in/juandelacruz', ac: 'url', check: checkUrl,
+        hint: 'LinkedIn, portfolio, GitHub, Facebook or website — clickable in the PDF.',
+      },
     ],
   },
   {
@@ -57,13 +65,16 @@ export const SECTIONS = [
     desc: 'Work, OJT, apprenticeship or major school projects — most recent first.',
     kind: 'list',
     addLabel: 'Add experience',
-    blank: () => ({ type: 'Work Experience', role: '', organization: '', location: '', start: '', end: '', current: false, responsibilities: '', accomplishments: '' }),
+    blank: () => ({ type: 'Work Experience', role: '', organization: '', location: '', website: '', referenceName: '', referenceContact: '', start: '', end: '', current: false, responsibilities: '', accomplishments: '' }),
     itemTitle: (it) => [it.role || 'Untitled role', it.organization || it.type],
     fields: [
       { key: 'type', label: 'Type', type: 'select', options: EXPERIENCE_TYPES },
       { key: 'role', label: 'Role / Project title', placeholder: 'Customer Service Intern' },
       { key: 'organization', label: 'Organization / School', placeholder: 'ABC Corporation' },
       { key: 'location', label: 'Location', placeholder: 'Makati City' },
+      { key: 'website', label: 'Company website (optional)', type: 'url', placeholder: 'abccorp.com.ph', full: true, check: checkUrl },
+      { key: 'referenceName', label: 'Reference name (optional)', placeholder: 'Ms. Maria Reyes, Team Leader' },
+      { key: 'referenceContact', label: 'Reference contact (optional)', placeholder: '0918 765 4321 or email' },
       { key: 'start', label: 'Start date', placeholder: 'Jun 2023' },
       { key: 'end', label: 'End date', placeholder: 'Dec 2023', disabledWhen: 'current' },
       { key: 'current', label: 'I’m currently in this role', type: 'checkbox', full: true },
@@ -115,7 +126,7 @@ export const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
 
 export function blankState() {
   return {
-    personal: { firstName: '', middleName: '', lastName: '', suffix: '', title: '', address: '', zip: '', phone: '', email: '', photo: '' },
+    personal: { firstName: '', middleName: '', lastName: '', suffix: '', title: '', address: '', zip: '', phone: '', email: '', linkType: 'LinkedIn', link: '', photo: '' },
     summary: { text: '' },
     skills: { hard: '', soft: '' },
     experience: [SECTION_BY_ID.experience.blank()],
@@ -131,6 +142,7 @@ export function sampleState() {
       title: 'Junior Web Developer', photo: '',
       address: '123 Mabini St., Brgy. San Isidro, Quezon City, Metro Manila', zip: '1100',
       phone: '0917 123 4567', email: 'andrea.villanueva@email.com',
+      linkType: 'LinkedIn', link: 'linkedin.com/in/andreavillanueva',
     },
     summary: {
       text:
@@ -143,6 +155,7 @@ export function sampleState() {
     experience: [
       {
         type: 'OJT / Internship', role: 'Web Developer Intern', organization: 'Bright Pixel Digital Solutions', location: 'Pasig City',
+        website: 'brightpixel.ph', referenceName: 'Engr. Ramon P. Cruz, Senior Software Engineer', referenceContact: '0918 765 4321',
         start: 'Jan 2024', end: 'May 2024', current: false,
         responsibilities:
           'Built responsive landing pages in HTML, CSS and JavaScript from Figma designs\nDeveloped reusable React components for two client dashboards\nCollaborated with QA in weekly sprints using Git and GitHub pull requests',
@@ -151,6 +164,7 @@ export function sampleState() {
       },
       {
         type: 'School Project', role: 'Lead Developer, Barangay Clearance Request System (Capstone)', organization: 'Polytechnic University of the Philippines', location: 'Manila',
+        website: '', referenceName: '', referenceContact: '',
         start: 'Aug 2023', end: 'Apr 2024', current: false,
         responsibilities:
           'Led a 4-member team in planning, building and testing a web-based request system\nDesigned the MySQL database and REST API used by the front end',

@@ -1,8 +1,8 @@
 import { forwardRef } from 'react';
-import { Mail, Phone, Pin } from './Icons.jsx';
+import { Facebook, Github, Globe, Link, Linkedin, Mail, Phone, Pin } from './Icons.jsx';
 import { HEADINGS, SUBHEADINGS } from '../model.js';
 
-const CONTACT_ICON = { phone: Phone, mail: Mail, pin: Pin };
+const CONTACT_ICON = { phone: Phone, mail: Mail, pin: Pin, linkedin: Linkedin, facebook: Facebook, github: Github, globe: Globe, link: Link };
 
 function Section({ title, children }) {
   return (
@@ -50,9 +50,13 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
           )}
           {m.contact.length > 0 ? (
             <div className="r-contact">
-              {m.contact.map(({ type, text }) => {
-                const Icon = CONTACT_ICON[type];
-                return <span key={type}><Icon size={11} />{text}</span>;
+              {m.contact.map(({ type, text, href }) => {
+                const Icon = CONTACT_ICON[type] || Link;
+                return href ? (
+                  <a key={type} href={href} target="_blank" rel="noopener noreferrer"><Icon size={11} />{text}</a>
+                ) : (
+                  <span key={type}><Icon size={11} />{text}</span>
+                );
               })}
             </div>
           ) : (
@@ -84,6 +88,13 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
                 <span className="r-date">{e.dates}</span>
               </div>
               {e.meta && <div className="r-sub">{e.meta}</div>}
+              {(e.website || e.reference) && (
+                <div className="r-extra">
+                  {e.website && <a href={e.website.href} target="_blank" rel="noopener noreferrer">{e.website.text}</a>}
+                  {e.website && e.reference && <span className="r-dot"> · </span>}
+                  {e.reference && <span>Reference: {e.reference}</span>}
+                </div>
+              )}
               {e.responsibilities.length > 0 && (
                 <>
                   <div className="r-level">{SUBHEADINGS.responsibilities}</div>

@@ -2,6 +2,15 @@ import { SECTION_BY_ID } from './data.js';
 
 export const has = (v) => (typeof v === 'string' ? v.trim() !== '' : !!v);
 
+/** Turn what the user typed into a clickable URL and a clean display form. */
+export function toLink(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return null;
+  const href = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`;
+  const text = v.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '');
+  return { href, text };
+}
+
 /** Split comma- or newline-separated text into trimmed items. */
 export const splitList = (s) =>
   String(s || '').split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
