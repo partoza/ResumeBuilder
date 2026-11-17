@@ -236,7 +236,6 @@ export default function App() {
               ))}
             </form>
             <footer className="form-footer">
-              <span>Runs entirely in your browser — no account, no database.</span>
               <span>
                 Developed by{' '}
                 <a className="credit" href="https://portfolio.partoza.dev" target="_blank" rel="noopener noreferrer">
