@@ -5,6 +5,7 @@ import LetterPreview from './components/LetterPreview.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 import Select from './components/Select.jsx';
 import PdfPages from './components/PdfPages.jsx';
+import { documentText, findMisspellings, ignoreWord, preloadSpellcheck, replaceWordIn } from './spellcheck.js';
 import { Download, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
 import { SECTIONS, blankState, sampleState } from './data.js';
 import {
@@ -18,6 +19,8 @@ import {
 } from './storage.js';
 
 const PAPER_W = 794; // A4 width in CSS px at 96 dpi
+
+const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
 // Stable React keys for repeatable entries.
 let nextId = 1;
@@ -171,6 +174,52 @@ export default function App() {
   const [pages, setPages] = useState(1);
   const [pdfView, setPdfView] = useState({ tab: null, ok: false });
   useEffect(preloadPdfAssets, []);
+
+  /* ---- spell check (red squiggles in the preview) ---- */
+  const [spellOn, setSpellOn] = useState(() => {
+    try { return localStorage.getItem('resume-builder:spell') !== 'off'; } catch { return true; }
+  });
+  const [misspelled, setMisspelled] = useState(() => new Set());
+  const [dictVersion, setDictVersion] = useState(0);
+  useEffect(() => {
+    try { localStorage.setItem('resume-builder:spell', spellOn ? 'on' : 'off'); } catch { /* ignore */ }
+    if (spellOn) preloadSpellcheck();
+  }, [spellOn]);
+  useEffect(() => {
+    if (!spellOn) { setMisspelled(new Set()); return undefined; }
+    let alive = true;
+    const t = setTimeout(() => {
+      findMisspellings(documentText(docTab, data, letter))
+        .then((set) => alive && setMisspelled((prev) => (sameSet(prev, set) ? prev : set)))
+        .catch((err) => console.warn('Spell check unavailable', err));
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
+  }, [spellOn, docTab, data, letter, dictVersion]);
+
+  // Fix a word everywhere it appears in the open document's text fields.
+  const fixWord = useCallback((word, replacement) => {
+    const fix = (t) => replaceWordIn(t, word, replacement);
+    if (docTab === 'letter') {
+      setLetter((l) => ({ ...l, content: Object.fromEntries(Object.entries(l.content).map(([k, v]) => [k, k === 'greeting' ? v : fix(v)])) }));
+    } else {
+      setData((d) => ({
+        ...d,
+        personal: { ...d.personal, title: fix(d.personal.title) },
+        summary: { text: fix(d.summary.text) },
+        skills: { hard: fix(d.skills.hard), soft: fix(d.skills.soft) },
+        experience: d.experience.map((e) => ({ ...e, role: fix(e.role), typeOther: fix(e.typeOther), responsibilities: fix(e.responsibilities), accomplishments: fix(e.accomplishments) })),
+        education: d.education.map((e) => ({ ...e, degree: fix(e.degree), honors: fix(e.honors) })),
+        credentials: d.credentials.map((c) => ({ ...c, name: fix(c.name) })),
+      }));
+    }
+    notify(`Changed “${word}” to “${replacement}”`);
+  }, [docTab, notify]);
+
+  const ignoreSpelling = useCallback((word) => {
+    ignoreWord(word);
+    setDictVersion((v) => v + 1);
+    notify(`“${word}” added to your dictionary`);
+  }, [notify]);
   const overLimit = pages > docInfo.max;
 
   function switchDoc(next) {
@@ -599,6 +648,16 @@ export default function App() {
               </div>
             )}
             <div className="toolbar-right">
+            <button
+              type="button"
+              className={`spell-toggle${spellOn ? ' is-on' : ''}${spellOn && misspelled.size ? ' has-errors' : ''}`}
+              aria-pressed={spellOn}
+              title={spellOn ? 'Spell check is on — click to turn it off' : 'Spell check is off — click to turn it on'}
+              onClick={() => setSpellOn((v) => !v)}
+            >
+              <span className="spell-icon" aria-hidden="true">abc</span>
+              {spellOn ? (misspelled.size ? `${misspelled.size} spelling` : 'Spelling OK') : 'Spelling off'}
+            </button>
             <span className={`page-count${overLimit ? ' over' : ''}`}>
               A4 · {pages} {pages === 1 ? 'page' : 'pages'}
               {overLimit ? ` — over the ${docInfo.max}-page limit` : ` of ${docInfo.max} max`}
@@ -631,6 +690,9 @@ export default function App() {
                 maxPages={docInfo.max}
                 onPageCount={setPages}
                 onReady={(ok) => setPdfView({ tab: docTab, ok })}
+                misspelled={misspelled}
+                onReplace={fixWord}
+                onIgnore={ignoreSpelling}
               />
             </div>
           </div>

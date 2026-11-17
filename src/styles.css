@@ -695,3 +695,91 @@ button { font: inherit; color: inherit; }
 
 /* Address sits on its own row under phone · email · link */
 .r-contact .r-own-row { flex-basis: 100%; }
+
+/* ============ pdf.js text layer (subset of pdf_viewer.css) ============ */
+.pdf-sheet { position: relative; }
+.textLayer {
+  position: absolute; inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  -webkit-text-size-adjust: none; text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 1;
+}
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.textLayer span.markedContent { top: 0; height: 0; }
+.textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
+.textLayer ::selection { background: rgba(0, 100, 255, 0.25); }
+
+/* ============ Spelling: red squiggle under misspelled words ============ */
+.textLayer span.spell-err {
+  position: static;
+  cursor: pointer;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #e5484d;
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+  border-radius: 2px;
+}
+.textLayer span.spell-err:hover { background: rgba(229, 72, 77, 0.12); }
+
+.spell-menu {
+  position: fixed; z-index: 80;
+  width: 240px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 38px -10px rgba(0, 0, 0, .25), 0 10px 20px -15px rgba(0, 0, 0, .2);
+  overflow: hidden;
+  animation: select-in .12s ease-out;
+}
+.spell-menu-head { padding: 10px 12px 8px; border-bottom: 1px solid var(--border); }
+.spell-menu-word { display: block; font-weight: 600; text-decoration: underline wavy #e5484d; text-underline-offset: 3px; }
+.spell-menu-sub { display: block; margin-top: 2px; font-size: 12px; color: var(--fg-muted); }
+.spell-menu-list, .spell-menu-foot { padding: 4px; }
+.spell-menu-foot { border-top: 1px solid var(--border); }
+.spell-menu-item {
+  display: block; width: 100%;
+  padding: 6px 8px;
+  border: 0; border-radius: 4px; background: none;
+  text-align: left; font-size: 14px; color: var(--fg);
+  cursor: pointer;
+}
+.spell-menu-item:hover, .spell-menu-item:focus-visible { background: var(--bg-muted); outline: none; }
+.spell-menu-item.muted { font-size: 13px; color: var(--fg-muted); }
+.spell-menu-empty { padding: 6px 8px; font-size: 13px; color: var(--fg-subtle); }
+
+/* ============ Spelling toggle (preview toolbar) ============ */
+.spell-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 9px;
+  font: inherit; font-size: 12px; font-weight: 500;
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.spell-toggle:hover { border-color: var(--border-strong); color: var(--fg); }
+.spell-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.spell-icon {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+  text-decoration: underline wavy var(--fg-subtle); text-underline-offset: 2px;
+}
+.spell-toggle.is-on .spell-icon { text-decoration-color: var(--success); }
+.spell-toggle.has-errors { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.spell-toggle.has-errors .spell-icon { text-decoration-color: var(--danger); }
+@media (max-width: 640px) { .spell-toggle { padding: 0 7px; } }
