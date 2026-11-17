@@ -1,3 +1,5 @@
+import Select from './Select.jsx';
+
 export default function Field({ field: f, id, value, onChange, disabled }) {
   const cls = 'field' + (f.full ? ' span-full' : '');
 
@@ -34,13 +36,7 @@ export default function Field({ field: f, id, value, onChange, disabled }) {
       />
     );
   } else if (f.type === 'select') {
-    control = (
-      <select className="select" id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-        {f.options.map((o) => (
-          <option key={o} value={o}>{o || 'Select…'}</option>
-        ))}
-      </select>
-    );
+    control = <Select id={id} value={value} options={f.options} onChange={onChange} ariaLabel={f.label} />;
   } else {
     control = (
       <input

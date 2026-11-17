@@ -3,6 +3,7 @@ import FormSection from './components/FormSection.jsx';
 import ResumePreview from './components/ResumePreview.jsx';
 import LetterPreview from './components/LetterPreview.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
+import Select from './components/Select.jsx';
 import { Download, Logo, Moon, Sun, Swap } from './components/Icons.jsx';
 import { SECTIONS, blankState, sampleState } from './data.js';
 import {
@@ -426,27 +427,22 @@ export default function App() {
           <div className="preview-toolbar">
             {isLetter && (
               <div className="format-bar" role="group" aria-label="Letter formatting">
-                <select
-                  className="tool-select font"
-                  aria-label="Font"
-                  title="Font"
+                <Select
+                  size="sm"
+                  className="tool-font"
+                  ariaLabel="Font"
                   value={letterModel.font.name}
-                  style={{ fontFamily: letterModel.font.css }}
-                  onChange={(e) => updateLetter(['format', 'font'], e.target.value)}
-                >
-                  {LETTER_FONTS.map((f) => (
-                    <option key={f.name} value={f.name} style={{ fontFamily: f.css }}>{f.name}</option>
-                  ))}
-                </select>
-                <select
-                  className="tool-select size"
-                  aria-label="Font size"
-                  title="Font size"
+                  options={LETTER_FONTS.map((f) => ({ value: f.name, label: f.name, style: { fontFamily: f.css } }))}
+                  onChange={(v) => updateLetter(['format', 'font'], v)}
+                />
+                <Select
+                  size="sm"
+                  className="tool-size"
+                  ariaLabel="Font size"
                   value={letterModel.size}
-                  onChange={(e) => updateLetter(['format', 'size'], Number(e.target.value))}
-                >
-                  {LETTER_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+                  options={LETTER_SIZES.map((n) => ({ value: n, label: String(n) }))}
+                  onChange={(v) => updateLetter(['format', 'size'], Number(v))}
+                />
               </div>
             )}
             <div className="toolbar-right">

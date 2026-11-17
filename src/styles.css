@@ -366,31 +366,10 @@ button { font: inherit; color: inherit; }
 .page-count.over { color: var(--danger); font-weight: 500; }
 /* Docs-style formatting controls (cover letter) */
 .format-bar { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.tool-select {
-  height: 28px;
-  padding: 0 26px 0 8px;
-  font: inherit; font-size: 13px;
-  color: var(--fg);
-  background-color: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 7px center;
-  cursor: pointer;
-  transition: border-color .15s ease, box-shadow .15s ease;
-}
-.tool-select:hover { border-color: var(--border-strong); }
-.tool-select:focus-visible { outline: none; border-color: var(--fg-muted); box-shadow: 0 0 0 3px var(--ring); }
-.tool-select.font { width: 150px; }
-.tool-select.size { width: 64px; }
-.tool-select option { color: #0a0a0a; background: #fff; }
 .toolbar-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .toolbar-right .page-count { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 640px) {
   .format-bar + .toolbar-right .page-count { display: none; }
-  .tool-select.font { width: 120px; }
 }
 .zoom-label { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; color: var(--fg-muted); }
 .preview-scroll { flex: 1; overflow: auto; padding: 32px 24px 48px; }
@@ -572,3 +551,68 @@ button { font: inherit; color: inherit; }
   .modal-footer { flex-direction: column-reverse; }
   .modal-footer .btn { width: 100%; }
 }
+
+/* ============ Select (shadcn/ui style) ============ */
+.select-trigger {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; height: 38px;
+  padding: 0 10px 0 12px;
+  font: inherit; font-size: 14px; text-align: left;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.select-trigger:hover { border-color: var(--border-strong); }
+.select-trigger:focus-visible, .select-trigger.is-open {
+  outline: none; border-color: var(--fg-muted); box-shadow: 0 0 0 3px var(--ring);
+}
+.select-trigger:disabled { opacity: .5; cursor: not-allowed; }
+.select-sm { height: 28px; padding: 0 6px 0 9px; font-size: 13px; gap: 6px; }
+.select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-value.is-placeholder { color: var(--fg-subtle); }
+.select-chevron { flex: none; opacity: .5; transition: transform .15s ease; }
+.select-trigger.is-open .select-chevron { transform: rotate(180deg); }
+
+.select-content {
+  position: fixed; z-index: 70;
+  max-height: 280px; overflow-y: auto;
+  padding: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 38px -10px rgba(0, 0, 0, .25), 0 10px 20px -15px rgba(0, 0, 0, .2);
+  outline: none;
+  animation: select-in .12s ease-out;
+  transform-origin: top;
+}
+.select-content.is-up { transform-origin: bottom; }
+:root[data-theme="dark"] .select-content { box-shadow: 0 10px 38px -10px rgba(0, 0, 0, .8); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .select-content { box-shadow: 0 10px 38px -10px rgba(0, 0, 0, .8); }
+}
+.select-item {
+  position: relative;
+  display: flex; align-items: center;
+  min-height: 32px;
+  padding: 6px 32px 6px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+.select-item.is-active { background: var(--bg-muted); }
+.select-item[aria-selected="true"] { font-weight: 500; }
+.select-check { position: absolute; right: 8px; }
+@keyframes select-in { from { opacity: 0; transform: scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .select-content { animation: none; } }
+
+/* Toolbar sizes for the letter format bar */
+.select-trigger.tool-font { width: 156px; }
+.select-trigger.tool-size { width: 62px; }
+@media (max-width: 640px) { .select-trigger.tool-font { width: 124px; } }
