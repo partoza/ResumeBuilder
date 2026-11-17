@@ -631,3 +631,21 @@ button { font: inherit; color: inherit; }
 .select-trigger.tool-font { width: 156px; }
 .select-trigger.tool-size { width: 62px; }
 @media (max-width: 640px) { .select-trigger.tool-font { width: 124px; } }
+
+/* ============ Page-by-page PDF preview ============ */
+.pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pdf-page { margin: 0; display: flex; flex-direction: column; align-items: center; }
+.pdf-sheet {
+  background: #fff;
+  border-radius: 2px;
+  box-shadow: var(--shadow-paper);
+  overflow: hidden;
+}
+.pdf-sheet canvas { display: block; width: 100%; height: 100%; }
+.pdf-page.is-over .pdf-sheet { box-shadow: 0 0 0 2px var(--danger), var(--shadow-paper); }
+.pdf-page-label {
+  margin: 8px 0 14px;
+  font-size: 12px; color: var(--fg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.pdf-page.is-over .pdf-page-label { color: var(--danger); font-weight: 500; }

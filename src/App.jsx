@@ -4,6 +4,7 @@ import ResumePreview from './components/ResumePreview.jsx';
 import LetterPreview from './components/LetterPreview.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 import Select from './components/Select.jsx';
+import PdfPages from './components/PdfPages.jsx';
 import { Download, Logo, Moon, Sun, Swap } from './components/Icons.jsx';
 import { SECTIONS, blankState, sampleState } from './data.js';
 import {
@@ -164,22 +165,12 @@ export default function App() {
   const letterModel = useMemo(() => buildLetterModel(data.personal, letter), [data.personal, letter]);
   const words = isLetter ? letterWordCount(letterModel) : 0;
 
-  // Lay out the real PDF in the background to report its page count.
+  // The preview renders the real PDF page by page (PdfPages), which also reports
+  // the page count. Until it's ready — or while the form is empty — the live HTML
+  // preview (with placeholders) is shown instead.
   const [pages, setPages] = useState(1);
+  const [pdfView, setPdfView] = useState({ tab: null, ok: false });
   useEffect(preloadPdfAssets, []);
-  useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const doc = await (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
-        if (!cancelled) setPages(doc.getNumberOfPages());
-      } catch { /* ignore */ }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [isLetter, model, letterModel]);
   const overLimit = pages > docInfo.max;
 
   function switchDoc(next) {
@@ -374,6 +365,8 @@ export default function App() {
   const formState = isLetter ? letter : data;
   const formUpdate = isLetter ? updateLetter : update;
   const paperStyle = { transform: `scale(${scale})` };
+  const docHasContent = isLetter ? letterHasContent(letter) : resumeHasContent;
+  const showPdfPages = docHasContent && pdfView.ok && pdfView.tab === docTab;
 
   return (
     <>
@@ -518,12 +511,25 @@ export default function App() {
             </div>
           </div>
           <div className="preview-scroll" ref={scrollRef}>
-            <div className="paper-wrap" style={{ width: PAPER_W * scale, height: paperH * scale }}>
-              {isLetter ? (
-                <LetterPreview ref={paperRef} model={letterModel} style={paperStyle} />
-              ) : (
-                <ResumePreview ref={paperRef} model={model} style={paperStyle} />
-              )}
+            {!showPdfPages && (
+              <div className="paper-wrap" style={{ width: PAPER_W * scale, height: paperH * scale }}>
+                {isLetter ? (
+                  <LetterPreview ref={paperRef} model={letterModel} style={paperStyle} />
+                ) : (
+                  <ResumePreview ref={paperRef} model={model} style={paperStyle} />
+                )}
+              </div>
+            )}
+            <div hidden={!showPdfPages}>
+              <PdfPages
+                key={docTab}
+                build={buildPdf}
+                version={isLetter ? letterModel : model}
+                width={PAPER_W * scale}
+                maxPages={docInfo.max}
+                onPageCount={setPages}
+                onReady={(ok) => setPdfView({ tab: docTab, ok })}
+              />
             </div>
           </div>
         </section>
