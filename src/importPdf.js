@@ -8,7 +8,7 @@
 import { loadPdfjs } from './pdfjs.js';
 import { extractEmbedded } from './exportPdf.js';
 import { EXPERIENCE_TYPES, LINK_TYPES } from './data.js';
-import { COMPLIMENTARY_CLOSES } from './letterData.js';
+import { COMPLIMENTARY_CLOSES, autoSalutation } from './letterData.js';
 import { splitTopLevel } from './utils.js';
 
 export const MAX_IMPORT_BYTES = 15 * 1024 * 1024;
@@ -691,7 +691,9 @@ export function parseLetter(lines) {
   }
   if (salIdx >= 0) {
     const sal = texts[salIdx];
-    content.salutation = /^dear hiring manager:?$/i.test(sal) ? '' : sal;
+    // Leave it blank (automatic) when it's what the app would write anyway, with "," or ":".
+    const bare = (x) => x.replace(/[,:]\s*$/, '').toLowerCase();
+    content.salutation = bare(sal) === bare(autoSalutation(recipient.name)) ? '' : sal;
   }
 
   const bodyLines = lines.slice(salIdx >= 0 ? salIdx + 1 : recEnd, closeIdx >= 0 ? closeIdx : lines.length);

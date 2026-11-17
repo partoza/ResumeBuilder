@@ -42,7 +42,7 @@ export const LETTER_SECTIONS = [
     kind: 'object',
     fields: [
       { key: 'position', label: 'Position applied for', placeholder: 'Junior Web Developer', full: true },
-      { key: 'salutation', label: 'Salutation', placeholder: 'Leave blank to use “Dear Ms. Santos:” or “Dear Hiring Manager:”', full: true },
+      { key: 'salutation', label: 'Salutation', placeholder: 'Leave blank to use “Dear Ms. Santos,” or “Dear Hiring Manager,”', full: true },
       {
         key: 'opening', label: 'Opening paragraph', type: 'textarea', full: true,
         hint: 'Name the position, where you found it, and one line on why you’re a strong fit.',
@@ -114,18 +114,18 @@ export function sampleLetter() {
 const HONORIFIC = /^(mr|ms|mrs|miss|dr|engr|atty|prof|arch|hon)\.?$/i;
 const SURNAME_PARTICLE = /^(de|del|dela|della|delos|de los|da|di|san|sta\.?|sto\.?|van|von)$/i;
 
-/** "Ms. Patricia Lim" → "Dear Ms. Lim:"; no title → "Dear Patricia Lim:"; blank → "Dear Hiring Manager:". */
+/** "Ms. Patricia Lim" → "Dear Ms. Lim,"; no title → "Dear Patricia Lim,"; blank → "Dear Hiring Manager,". */
 export function autoSalutation(recipientName) {
   const parts = String(recipientName || '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return 'Dear Hiring Manager:';
+  if (!parts.length) return 'Dear Hiring Manager,';
   if (parts.length > 2 && HONORIFIC.test(parts[0])) {
     const title = parts[0].replace(/\.?$/, '.');
     const rest = parts.slice(1);
     const particle = rest.findIndex((w, i) => i > 0 && i < rest.length - 1 && SURNAME_PARTICLE.test(w));
     const last = particle > 0 ? rest.slice(particle).join(' ') : rest[rest.length - 1];
-    return `Dear ${title.charAt(0).toUpperCase() + title.slice(1)} ${last}:`;
+    return `Dear ${title.charAt(0).toUpperCase() + title.slice(1)} ${last},`;
   }
-  return `Dear ${parts.join(' ')}:`;
+  return `Dear ${parts.join(' ')},`;
 }
 
 function formatLongDate(iso) {
