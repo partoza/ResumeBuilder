@@ -52,15 +52,20 @@ export const SECTIONS = [
   {
     id: 'skills',
     title: 'Skills',
-    desc: 'Relevant hard and soft skills, separated by commas.',
+    desc: 'Relevant hard and soft skills — separate each skill with a comma.',
     kind: 'object',
     fields: [
       {
-        key: 'hard', label: 'Hard / technical skills', type: 'textarea', full: true,
+        key: 'hard', label: 'Hard / technical skills', type: 'textarea', full: true, split: 'skills',
+        instruction: { text: 'Separate each skill with a comma', mark: ',' },
         hint: 'Mirror the exact keywords from the job posting — ATS software matches on them.',
         placeholder: 'MS Excel (Pivot Tables, VLOOKUP), Data Entry (60 WPM), Bookkeeping, CRM Software',
       },
-      { key: 'soft', label: 'Soft skills', type: 'textarea', full: true, placeholder: 'Clear Communication, Teamwork, Time Management, Attention to Detail' },
+      {
+        key: 'soft', label: 'Soft skills', type: 'textarea', full: true, split: 'skills',
+        instruction: { text: 'Separate each skill with a comma', mark: ',' },
+        placeholder: 'Clear Communication, Teamwork, Time Management, Attention to Detail',
+      },
     ],
   },
   {
@@ -88,13 +93,17 @@ export const SECTIONS = [
       { key: 'current', label: 'I’m currently in this role', type: 'checkbox', full: true },
       {
         key: 'responsibilities', label: 'Job responsibilities', type: 'textarea', full: true, check: checkVerbs,
-        hint: 'One per line. Start each with an action verb: Managed, Prepared, Resolved, Built, Coordinated…',
-        placeholder: 'Resolved billing and account concerns via phone and email\nPrepared daily call reports for the team leader',
+        split: 'items',
+        instruction: { text: 'End each item with a period or start a new line — each becomes its own bullet', mark: '.' },
+        hint: 'Start each with an action verb: Managed, Prepared, Resolved, Built, Coordinated…',
+        placeholder: 'Resolved billing and account concerns via phone and email. Prepared daily call reports for the team leader.',
       },
       {
         key: 'accomplishments', label: 'Accomplishments', type: 'textarea', full: true, check: checkMeasurable,
-        hint: 'One per line. Use numbers: %, ₱, time saved, volume handled, ranking.',
-        placeholder: 'Maintained a 96% customer satisfaction score across 3 months\nCut report preparation time by 30% with an Excel template',
+        split: 'items',
+        instruction: { text: 'End each item with a period or start a new line — each becomes its own bullet', mark: '.' },
+        hint: 'Use numbers: %, ₱, time saved, volume handled, ranking.',
+        placeholder: 'Maintained a 96% customer satisfaction score across 3 months. Cut report preparation time by 30% with an Excel template.',
       },
     ],
   },

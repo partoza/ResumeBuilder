@@ -174,6 +174,8 @@ function toLines(items, page) {
   }
   rows.sort((a, b) => b.y - a.y);
 
+  // The page's right text margin: the furthest right any text reaches (right-aligned dates, full lines).
+  const pageRight = Math.max(0, ...runs.map((r) => r.x + r.w));
   let prevY = null;
   return rows.map((row) => {
     row.runs.sort((a, b) => a.x - b.x);
@@ -192,7 +194,9 @@ function toLines(items, page) {
     const first = prevY === null; // first line on this page: no gap to measure
     const gapBefore = first ? 0 : prevY - row.y;
     prevY = row.y;
-    return { text: text.replace(/[  ]+/g, ' ').replace(/ ?\t ?/g, '\t').trim(), size, gapBefore, page, first };
+    const x = row.runs[0].x;
+    const right = Math.max(...row.runs.map((r) => r.x + r.w));
+    return { text: text.replace(/[  ]+/g, ' ').replace(/ ?\t ?/g, '\t').trim(), size, gapBefore, page, first, x, right, pageRight };
   });
 }
 
@@ -365,13 +369,23 @@ function toItems(lines) {
   const rest = ls.slice(1).filter((l) => !BULLET_RE.test(l.text));
   const useGaps = rest.some(wide) && rest.some((l) => !wide(l) && l.gapBefore > 0);
 
+  // A line that ran to (nearly) the page's right text margin was wrapped by the layout.
+  const wrapped = (l) => l && l.pageRight && l.right >= l.pageRight - l.size * 4;
+
   const items = [];
+  let prevLine = null;
   for (const l of ls) {
     const t = clean(l.text);
-    if (BULLET_RE.test(t)) items.push(t.replace(BULLET_RE, ''));
-    else if (!items.length) items.push(t);
-    else if (useGaps && !l.first ? !wide(l) : /^[a-z(&,]/.test(t)) items[items.length - 1] += ' ' + t;
-    else items.push(t);
+    let continues;
+    if (BULLET_RE.test(t) || !items.length) continues = false;
+    else if (/^[a-z(&,]/.test(t)) continues = true;
+    else if (useGaps && !l.first) continues = !wide(l);
+    // Gaps can't decide (page break, or no second spacing seen): a line that ran to the
+    // right margin without finishing a sentence means the item wraps onto this line.
+    else continues = wrapped(prevLine) && !/[.!?]$/.test(items[items.length - 1]);
+    if (continues) items[items.length - 1] += ' ' + t;
+    else items.push(t.replace(BULLET_RE, ''));
+    prevLine = l;
   }
   return items.map((s) => s.trim()).filter(Boolean);
 }

@@ -50,17 +50,18 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
           )}
           {m.contact.length > 0 ? (
             <div className="r-contact">
-              {m.contact.map(({ type, text, href }) => {
+              {m.contact.map(({ type, text, href, ownRow }) => {
                 const Icon = CONTACT_ICON[type] || Link;
+                const cls = ownRow ? 'r-own-row' : undefined;
                 return href ? (
-                  <a key={type} href={href} target="_blank" rel="noopener noreferrer"><Icon size={11} />{text}</a>
+                  <a key={type} className={cls} href={href} target="_blank" rel="noopener noreferrer"><Icon size={11} />{text}</a>
                 ) : (
-                  <span key={type}><Icon size={11} />{text}</span>
+                  <span key={type} className={cls}><Icon size={11} />{text}</span>
                 );
               })}
             </div>
           ) : (
-            empty && <div className="r-contact r-placeholder"><span>Contact number</span><span>Email</span><span>Address, ZIP code</span></div>
+            empty && <div className="r-contact r-placeholder"><span>Contact number</span><span>Email</span><span>Link</span><span className="r-own-row">Address, ZIP code</span></div>
           )}
         </div>
         {m.photo && <img className="r-photo" src={m.photo} alt="" />}

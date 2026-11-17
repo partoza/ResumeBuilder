@@ -347,10 +347,11 @@ async function createPdf(kind, m, { source } = {}) {
     const rowH = lh(9.5);
     let x = left;
     font('I400', 9.5, INK2);
-    for (const { type, text: value, href } of m.contact) {
+    for (const { type, text: value, href, ownRow } of m.contact) {
       const lines = wrap(value, textW - icon - iconGap);
       const w = icon + iconGap + Math.max(...lines.map((l) => doc.getTextWidth(l)));
-      if (x > left && x + w > left + textW + 0.01) {
+      // Wrap when the item doesn't fit; the address always starts its own (bottom) row.
+      if (x > left && (ownRow || x + w > left + textW + 0.01)) {
         x = left;
         y += rowH + 4 * PX;
       }

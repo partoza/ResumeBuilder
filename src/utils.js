@@ -35,6 +35,30 @@ export function splitTopLevel(s, separators = ',\n') {
 export const splitList = (s) => splitTopLevel(s, ',\n');
 
 /** Split text into lines, dropping any bullet characters the user typed. */
+// Words ending in "." that don't end a sentence.
+const ABBREVIATION = /^(mr|ms|mrs|dr|engr|atty|prof|arch|hon|inc|co|corp|ltd|st|ave|blvd|brgy|jr|sr|no|nos|vs|etc|approx|dept|govt|sta|sto|e\.g|i\.e|u\.s|ph\.d|b\.s|m\.s|a\.m|p\.m)\.$/i;
+
+/**
+ * Bullet items from job responsibilities / accomplishments: a new line or a period
+ * followed by a new sentence starts a new item ("Built X. Improved Y." → 2 items).
+ * Abbreviations (Inc., Engr., e.g.) and decimals (3.5) don't split.
+ */
+export function splitItems(s) {
+  return splitLines(s).flatMap((line) => {
+    // Mark sentence ends without regex lookbehind (unsupported on older iOS Safari).
+    const parts = line.replace(/\.(\s+)(?=["“‘(₱A-Z0-9])/g, '.\u0000').split('\u0000');
+    const items = [];
+    for (const part of parts) {
+      const prev = items[items.length - 1];
+      const lastWord = prev?.split(/\s+/).pop().replace(/^["“‘'([{]+/, '');
+      const openBracket = prev && (prev.match(/[([{]/g) || []).length > (prev.match(/[)\]}]/g) || []).length;
+      if (prev !== undefined && (ABBREVIATION.test(lastWord) || openBracket)) items[items.length - 1] = `${prev} ${part}`;
+      else items.push(part);
+    }
+    return items.map((x) => x.trim()).filter(Boolean);
+  });
+}
+
 export const splitLines = (s) =>
   String(s || '').split('\n').map((x) => x.replace(/^\s*[-•*·]\s*/, '').trim()).filter(Boolean);
 

@@ -1,7 +1,7 @@
 // Normalizes form data into the exact content shown on the resume.
 // Both the on-screen preview and the PDF generator render from this, so they always match.
 import { experienceLabel } from './data.js';
-import { fullName, has, range, splitLines, splitList, toLink } from './utils.js';
+import { fullName, has, range, splitItems, splitList, toLink } from './utils.js';
 
 // Icon per profile link type (see LINK_TYPES in data.js).
 const LINK_ICON = { LinkedIn: 'linkedin', Facebook: 'facebook', GitHub: 'github', Portfolio: 'globe', Website: 'globe', Other: 'link' };
@@ -18,8 +18,8 @@ export function buildModel(d) {
       dates: range(e.start, e.current ? 'Present' : e.end),
       website: toLink(e.website),
       reference: [e.referenceName, e.referenceContact].filter(has).map((x) => x.trim()).join(', '),
-      responsibilities: splitLines(e.responsibilities),
-      accomplishments: splitLines(e.accomplishments),
+      responsibilities: splitItems(e.responsibilities),
+      accomplishments: splitItems(e.accomplishments),
     }));
 
   const education = d.education
@@ -44,11 +44,12 @@ export function buildModel(d) {
     title: (p.title || '').trim(),
     photo: p.photo || '',
     // Each contact item carries an icon type so preview and PDF draw the same icon.
+    // Order: phone, email, profile link — then the address on its own row at the bottom.
     contact: [
       { type: 'phone', text: (p.phone || '').trim() },
       { type: 'mail', text: (p.email || '').trim(), href: has(p.email) ? `mailto:${p.email.trim()}` : undefined },
-      { type: 'pin', text: address },
       ...(toLink(p.link) ? [{ type: LINK_ICON[p.linkType] || 'link', ...toLink(p.link) }] : []),
+      { type: 'pin', text: address, ownRow: true },
     ].filter((c) => c.text),
     summary: (d.summary.text || '').trim().replace(/\s*\n\s*/g, ' '),
     skills: { hard: splitList(d.skills.hard), soft: splitList(d.skills.soft) },
