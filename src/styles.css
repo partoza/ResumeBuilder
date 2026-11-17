@@ -448,3 +448,46 @@ button { font: inherit; color: inherit; }
 }
 .card.done .card-num svg { display: block; }
 .paper-wrap { transition: width .15s ease; }
+
+/* ============ Modal ============ */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  animation: modal-fade .15s ease;
+}
+:root[data-theme="dark"] .modal-backdrop { background: rgba(0, 0, 0, 0.6); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .modal-backdrop { background: rgba(0, 0, 0, 0.6); }
+}
+.modal {
+  width: 100%; max-width: 420px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  animation: modal-in .18s cubic-bezier(.2, .8, .2, 1);
+}
+.modal-body { padding: 24px 24px 20px; }
+.modal-title { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.015em; }
+.modal-desc { margin: 8px 0 0; color: var(--fg-muted); font-size: 14px; line-height: 1.55; }
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 14px 24px;
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border);
+}
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 88%, #000); }
+@keyframes modal-fade { from { opacity: 0; } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .modal { animation: none; }
+}
+@media (max-width: 560px) {
+  .modal-footer { flex-direction: column-reverse; }
+  .modal-footer .btn { width: 100%; }
+}

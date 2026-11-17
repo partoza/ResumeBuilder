@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FormSection from './components/FormSection.jsx';
 import ResumePreview from './components/ResumePreview.jsx';
+import { useConfirm } from './components/ConfirmDialog.jsx';
 import { Download, Logo, Moon, Sun, Swap } from './components/Icons.jsx';
 import { SECTIONS, blankState, sampleState } from './data.js';
 import { fileName, sectionHasContent, setIn } from './utils.js';
@@ -71,6 +72,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const [notify, toastView] = useToast();
+  const [confirm, confirmDialog] = useConfirm();
 
   const paperRef = useRef(null);
   const scrollRef = useRef(null);
@@ -121,13 +123,28 @@ export default function App() {
 
   const anyContent = SECTIONS.some((s) => sectionHasContent(data, s.id));
 
-  function loadSample() {
-    if (anyContent && !confirm('Replace your current entries with sample data?')) return;
+  async function loadSample() {
+    if (
+      anyContent &&
+      !(await confirm({
+        title: 'Load sample resume?',
+        description: 'This replaces everything you’ve entered with example data. Your current entries will be lost.',
+        confirmLabel: 'Replace with sample',
+      }))
+    ) return;
     setData(withAllIds(sampleState()));
     notify('Sample resume loaded');
   }
-  function clearAll() {
-    if (!confirm('Clear all fields?')) return;
+  async function clearAll() {
+    if (!anyContent) return notify('Nothing to clear');
+    if (
+      !(await confirm({
+        title: 'Clear all fields?',
+        description: 'Every section will be emptied, including your photo. This can’t be undone.',
+        confirmLabel: 'Clear all',
+        danger: true,
+      }))
+    ) return;
     setData(withAllIds(blankState()));
     notify('All fields cleared');
   }
@@ -275,6 +292,7 @@ export default function App() {
       </main>
 
       {toastView}
+      {confirmDialog}
     </>
   );
 }
