@@ -5,7 +5,7 @@ import LetterPreview from './components/LetterPreview.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 import Select from './components/Select.jsx';
 import PdfPages from './components/PdfPages.jsx';
-import { Download, Logo, Moon, Sun, Swap } from './components/Icons.jsx';
+import { Download, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
 import { SECTIONS, blankState, sampleState } from './data.js';
 import {
   LETTER_FONTS, LETTER_SECTIONS, LETTER_SIZES, blankLetter, buildLetterModel, letterHasContent, letterWordCount, sampleLetter,
@@ -14,7 +14,7 @@ import { fileName, sectionFilled, sectionHasContent, setIn } from './utils.js';
 import { buildModel } from './model.js';
 import { LETTER_MAX_PAGES, MAX_PAGES, createLetterPdf, createResumePdf, preloadPdfAssets } from './exportPdf.js';
 import {
-  clearLetter, clearResume, loadLetter, loadResume, loadUi, saveLetter, saveResume, saveUi,
+  clearLetter, clearResume, hydrateLetter, hydrateResume, loadLetter, loadResume, loadUi, saveLetter, saveResume, saveUi, stripIds,
 } from './storage.js';
 
 const PAPER_W = 794; // A4 width in CSS px at 96 dpi
@@ -291,16 +291,22 @@ export default function App() {
 
   const stepZoom = (dir) => setZoom(Math.min(1.5, Math.max(0.3, Math.round((scale + dir * 0.1) * 10) / 10)));
 
-  /* ---- download ---- */
+  /* ---- PDF builders ---- */
+  const buildPdf = () => (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
+  // Download/Print also embed the form data, so "Import PDF" can restore every field later.
+  const buildExportPdf = () =>
+    isLetter
+      ? createLetterPdf(letterModel, { source: letter })
+      : createResumePdf(model, { source: stripIds(data) });
+
   /* ---- print: prints the exact PDF that Download saves ---- */
   const [printing, setPrinting] = useState(false);
-  const buildPdf = () => (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
   const printRef = useRef(null);
   printRef.current = async function printPdf() {
     if (printing) return;
     setPrinting(true);
     try {
-      const doc = await buildPdf();
+      const doc = await buildExportPdf();
       const url = URL.createObjectURL(doc.output('blob'));
       document.getElementById('print-frame')?.remove();
       const frame = document.createElement('iframe');
@@ -345,10 +351,80 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  /* ---- import a PDF back into the form ---- */
+  const importInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  async function importFile(file) {
+    if (!file || importing) return;
+    setImporting(true);
+    try {
+      const { readPdf, parseResume, parseLetter, looksLikeLetter, ImportError } = await import('./importPdf.js');
+      const { embedded, lines } = await readPdf(file);
+      if (!embedded && !lines.some((l) => l.text)) {
+        throw new ImportError('No selectable text found — it may be a scanned image. Please type your details instead.');
+      }
+
+      const kind = embedded ? embedded.kind : looksLikeLetter(lines) ? 'letter' : 'resume';
+      const label = kind === 'letter' ? 'cover letter' : 'resume';
+      const hasExisting = kind === 'letter' ? letterHasContent(letter) : resumeHasContent;
+      if (
+        hasExisting &&
+        !(await confirm({
+          title: `Replace your ${label}?`,
+          description: `“${file.name}” will replace what you’ve entered in the ${label}. This can’t be undone.`,
+          confirmLabel: 'Import and replace',
+        }))
+      ) return;
+
+      if (kind === 'resume') {
+        let source = embedded ? embedded.data : parseResume(lines);
+        if (!embedded) {
+          // Keep one empty entry in sections the PDF didn't have, like a fresh form.
+          source = Object.fromEntries(Object.entries(source).filter(([, v]) => !Array.isArray(v) || v.length));
+        }
+        setData(withAllIds(hydrateResume(source)));
+      } else {
+        const source = embedded ? embedded.data : { ...parseLetter(lines), format: letter.format };
+        setLetter(hydrateLetter(source));
+      }
+      if (kind !== docTab) switchDoc(kind);
+      notify(
+        embedded
+          ? `Imported “${file.name}” — every field restored.`
+          : `Imported “${file.name}”. Review each section — some details may need fixing.`
+      );
+    } catch (err) {
+      console.error(err);
+      notify(err?.name === 'ImportError' ? err.message : 'Couldn’t import that PDF.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  const dragHasFile = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  const dropHandlers = {
+    onDragOver: (e) => {
+      if (!dragHasFile(e)) return;
+      e.preventDefault();
+      if (!dragging) setDragging(true);
+    },
+    onDragLeave: (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
+    },
+    onDrop: (e) => {
+      if (!dragHasFile(e)) return;
+      e.preventDefault();
+      setDragging(false);
+      importFile(e.dataTransfer.files[0]);
+    },
+  };
+
   async function downloadPdf() {
     setBusy(true);
     try {
-      const doc = await (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
+      const doc = await buildExportPdf();
       const n = doc.getNumberOfPages();
       doc.save(fileName(data.personal, docInfo.fileLabel));
       const unit = docInfo.max === 1 ? 'page' : 'pages';
@@ -423,13 +499,38 @@ export default function App() {
       </nav>
 
       <main className={`workspace${swap ? ' swap' : ''}`} data-view={view}>
-        <section className="pane pane-form" aria-label={`${docInfo.tab} form`} ref={formScrollRef}>
+        <section
+          className={`pane pane-form${dragging ? ' is-dragging' : ''}`}
+          aria-label={`${docInfo.tab} form`}
+          ref={formScrollRef}
+          {...dropHandlers}
+        >
           <div className="form-inner">
             <div className="form-intro">
               <h1>{docInfo.heading}</h1>
               <p>{docInfo.intro}</p>
               <div className="intro-actions">
                 <button className="btn btn-secondary btn-sm" onClick={loadSample}>Load sample</button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={importing}
+                  title="Import a PDF to edit it — drag and drop works too"
+                >
+                  <Upload size={14} />
+                  {importing ? 'Importing…' : 'Import PDF'}
+                </button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    importFile(file);
+                  }}
+                />
                 <button className="btn btn-ghost btn-sm danger" onClick={clearAll}>Clear all</button>
                 <span className={`save-status is-${saveStatus}`} role="status" aria-live="polite">
                   {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Not saved' : 'Saved in this browser'}

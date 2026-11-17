@@ -11,6 +11,7 @@ A frontend-only resume builder for Philippine job seekers. Fill in the form on o
 - **Built-in coaching** — flags weak bullet openers ("Responsible for…", "Helped…"), accomplishments without numbers, summaries outside 2–3 sentences, and invalid ZIP / phone / email formats.
 - **2-page limit indicator** — shows the real PDF page count and warns when the resume runs over.
 - **ATS-readable PDF** — generated with jsPDF using embedded Inter; every word is real, selectable text that applicant tracking systems can parse. The design matches the on-screen preview exactly.
+- **Import PDF** (both tabs, or drag a PDF onto the form) — PDFs downloaded from this app carry the form data in their metadata, so every field is restored exactly. Resumes and cover letters made elsewhere are read as text and mapped into the fields (name, contact details, sections, dated entries, letter parts) for you to review. Scanned/image-only PDFs can't be read.
 - **Cover Letter Builder** — a second tab for a standard block-format business letter (date, recipient, Re: line, salutation, opening / body / closing, sign-off, enclosure note), with a 1-page indicator and word count. The salutation fills itself in ("Dear Ms. Lim:" or "Dear Hiring Manager:").
 
 ## Getting started

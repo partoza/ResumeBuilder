@@ -1,22 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { loadPdfjs } from '../pdfjs.js';
 
 const A4_RATIO = 297 / 210;
-
-// pdf.js is large, so it's loaded on first use. The legacy build includes polyfills
-// for older mobile browsers.
-let pdfjsPromise = null;
-function loadPdfjs() {
-  if (!pdfjsPromise) {
-    pdfjsPromise = Promise.all([
-      import('pdfjs-dist/legacy/build/pdf.min.mjs'),
-      import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
-    ]).then(([lib, worker]) => {
-      lib.GlobalWorkerOptions.workerSrc = worker.default;
-      return lib;
-    });
-  }
-  return pdfjsPromise;
-}
 
 /**
  * Shows the real PDF, page by page, so the preview's page cuts are exactly the

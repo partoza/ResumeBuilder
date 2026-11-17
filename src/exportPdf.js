@@ -126,10 +126,43 @@ export function pdfText(s) {
 /* Drawing                                                             */
 /* ------------------------------------------------------------------ */
 
-async function createPdf(kind, m) {
+/* ------------------------------------------------------------------ */
+/* Embedded form data — lets "Import PDF" restore every field exactly  */
+/* ------------------------------------------------------------------ */
+
+const EMBED_TAG = 'RBX1';
+const EMBED_NS = 'https://portfolio.partoza.dev/resume-builder/ns/1.0/';
+
+const toBase64Utf8 = (str) => {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+const fromBase64Utf8 = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+
+/** Find this app's embedded form data in raw PDF/XMP text. */
+export function extractEmbedded(text) {
+  const match = new RegExp(`${EMBED_TAG}:([A-Za-z0-9+/=]+):${EMBED_TAG}`).exec(text || '');
+  if (!match) return null;
+  try {
+    const payload = JSON.parse(fromBase64Utf8(match[1]));
+    if (payload?.app === 'resume-builder' && (payload.kind === 'resume' || payload.kind === 'letter') && payload.data) return payload;
+  } catch {
+    /* not ours / corrupted */
+  }
+  return null;
+}
+
+async function createPdf(kind, m, { source } = {}) {
   const [fonts, icons] = await Promise.all([loadFonts(), loadIcons()]);
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  if (source) {
+    // Stored in the PDF's XMP metadata (not visible on the page).
+    const payload = JSON.stringify({ app: 'resume-builder', v: 1, kind, data: source });
+    doc.addMetadata(`${EMBED_TAG}:${toBase64Utf8(payload)}:${EMBED_TAG}`, EMBED_NS);
+  }
   const plain = (s) => String(s ?? '');
   const T = fonts ? plain : pdfText;
   // Only embed Inter when the document actually uses it (keeps letters in standard fonts small).
@@ -492,5 +525,6 @@ async function createPdf(kind, m) {
   return doc;
 }
 
-export const createResumePdf = (model) => createPdf('resume', model);
-export const createLetterPdf = (model) => createPdf('letter', model);
+/** opts.source: the raw form data to embed so the PDF can be imported back for editing. */
+export const createResumePdf = (model, opts) => createPdf('resume', model, opts);
+export const createLetterPdf = (model, opts) => createPdf('letter', model, opts);

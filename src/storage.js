@@ -12,6 +12,25 @@ const KEYS = {
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+const SAFE_PHOTO = /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/;
+
+/**
+ * Copy only the known keys whose value has the same type as the blank default.
+ * Saved or imported data is untrusted: anything unexpected falls back to the default.
+ */
+function pick(base, saved) {
+  const out = { ...base };
+  if (!isObj(saved)) return out;
+  for (const key of Object.keys(base)) {
+    const v = saved[key];
+    if (v === undefined || typeof v !== typeof base[key]) continue;
+    if (typeof v === 'string' && v.length > 200000) continue;
+    if (key === 'photo' && v && !SAFE_PHOTO.test(v)) continue;
+    out[key] = v;
+  }
+  return out;
+}
+
 function read(key) {
   try {
     const raw = localStorage.getItem(key);
@@ -40,20 +59,26 @@ function remove(key) {
 
 /** Saved resume merged onto a blank one, so fields added in later versions always exist. */
 export function loadResume() {
+  return hydrateResume(read(KEYS.resume));
+}
+
+/** Merge any saved/imported resume data onto a blank resume (unknown keys ignored). */
+export function hydrateResume(saved) {
   const base = blankState();
-  const saved = read(KEYS.resume);
   if (!isObj(saved)) return base;
   for (const s of SECTIONS) {
     const v = saved[s.id];
     if (s.kind === 'list') {
-      // eslint-disable-next-line no-unused-vars
-      if (Array.isArray(v)) base[s.id] = v.filter(isObj).map(({ _id, ...it }) => ({ ...s.blank(), ...it }));
+      if (Array.isArray(v)) base[s.id] = v.filter(isObj).slice(0, 50).map((it) => pick(s.blank(), it));
     } else if (isObj(v)) {
-      base[s.id] = { ...base[s.id], ...v };
+      base[s.id] = pick(base[s.id], v);
     }
   }
   return base;
 }
+
+/** Copy without React list keys. */
+export const stripIds = (d) => JSON.parse(JSON.stringify(d, (k, v) => (k === '_id' ? undefined : v)));
 
 export const resumeHasContent = (d) => SECTIONS.some((s) => sectionHasContent(d, s.id));
 
@@ -63,17 +88,21 @@ export function saveResume(d) {
     remove(KEYS.resume);
     return true;
   }
-  return write(KEYS.resume, JSON.parse(JSON.stringify(d, (k, v) => (k === '_id' ? undefined : v))));
+  return write(KEYS.resume, stripIds(d));
 }
 export const clearResume = () => remove(KEYS.resume);
 
 /* ---------------- cover letter ---------------- */
 
 export function loadLetter() {
+  return hydrateLetter(read(KEYS.letter));
+}
+
+/** Merge any saved/imported letter data onto a blank letter. */
+export function hydrateLetter(saved) {
   const base = blankLetter();
-  const saved = read(KEYS.letter);
   if (!isObj(saved)) return base;
-  for (const k of Object.keys(base)) if (isObj(saved[k])) base[k] = { ...base[k], ...saved[k] };
+  for (const k of Object.keys(base)) base[k] = pick(base[k], saved[k]);
   return base;
 }
 

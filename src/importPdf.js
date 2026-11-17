@@ -1,0 +1,539 @@
+// "Import PDF": turn an uploaded PDF back into editable form data.
+//
+// 1. PDFs made by this app carry the original form data (see extractEmbedded in
+//    exportPdf.js), so every field is restored exactly.
+// 2. Any other PDF is read as text and parsed heuristically into the fields
+//    (name, contact details, sections, dated entries, letter parts). It's a best
+//    effort — the user reviews the result.
+import { loadPdfjs } from './pdfjs.js';
+import { extractEmbedded } from './exportPdf.js';
+import { EXPERIENCE_TYPES, LINK_TYPES } from './data.js';
+import { COMPLIMENTARY_CLOSES } from './letterData.js';
+
+export const MAX_IMPORT_BYTES = 15 * 1024 * 1024;
+
+/** An expected problem with the file, with a message that can be shown to the user. */
+export class ImportError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ImportError';
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Reading                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns { embedded, lines } where lines are visual text lines in reading order:
+ * { text, size, gapBefore, page }. Wide horizontal gaps inside a line become "\t".
+ */
+export async function readPdf(file) {
+  if (!file) throw new ImportError('No file selected.');
+  if (file.size > MAX_IMPORT_BYTES) throw new ImportError('That PDF is too large (15 MB max).');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (String.fromCharCode(...bytes.subarray(0, 5)) !== '%PDF-') throw new ImportError('That file isn’t a PDF.');
+
+  const lib = await loadPdfjs();
+  let pdf;
+  try {
+    pdf = await lib.getDocument({ data: bytes.slice(), isEvalSupported: false, disableFontFace: true }).promise;
+  } catch (err) {
+    if (err?.name === 'PasswordException') throw new ImportError('That PDF is password-protected. Remove the password and try again.');
+    throw new ImportError('Couldn’t open that PDF. It may be damaged.');
+  }
+
+  try {
+    // 1) Our own embedded data (XMP metadata), with a raw-bytes fallback.
+    let embedded = null;
+    try {
+      const meta = await pdf.getMetadata();
+      embedded = extractEmbedded(meta?.metadata?.getRaw?.());
+    } catch {
+      /* no metadata */
+    }
+    if (!embedded) embedded = extractEmbedded(new TextDecoder('latin1').decode(bytes));
+    if (embedded) return { embedded, lines: [] };
+
+    // 2) Text lines for heuristic parsing.
+    const lines = [];
+    for (let n = 1; n <= Math.min(pdf.numPages, 10); n++) {
+      const page = await pdf.getPage(n);
+      const content = await page.getTextContent();
+      lines.push(...toLines(content.items, n));
+    }
+    return { embedded: null, lines };
+  } finally {
+    pdf.destroy();
+  }
+}
+
+/** Group pdf.js text items into lines (top-to-bottom, left-to-right). */
+function toLines(items, page) {
+  const runs = items
+    .filter((it) => typeof it.str === 'string' && it.str.trim() !== '')
+    .map((it) => ({
+      str: it.str,
+      x: it.transform[4],
+      y: it.transform[5],
+      w: it.width,
+      size: Math.hypot(it.transform[2], it.transform[3]) || it.height || 10,
+    }));
+
+  const rows = [];
+  for (const r of runs.sort((a, b) => b.y - a.y || a.x - b.x)) {
+    const row = rows.find((l) => Math.abs(l.y - r.y) <= Math.max(2, r.size * 0.35));
+    if (row) row.runs.push(r);
+    else rows.push({ y: r.y, runs: [r] });
+  }
+  rows.sort((a, b) => b.y - a.y);
+
+  let prevY = null;
+  return rows.map((row) => {
+    row.runs.sort((a, b) => a.x - b.x);
+    const size = Math.max(...row.runs.map((r) => r.size));
+    let text = '';
+    let end = null;
+    for (const r of row.runs) {
+      if (end !== null) {
+        const gap = r.x - end;
+        if (gap > size * 1.2) text += '\t';
+        else if (gap > size * 0.12 && !/\s$/.test(text) && !/^\s/.test(r.str)) text += ' ';
+      }
+      text += r.str;
+      end = r.x + r.w;
+    }
+    const gapBefore = prevY === null ? 0 : prevY - row.y;
+    prevY = row.y;
+    return { text: text.replace(/[  ]+/g, ' ').replace(/ ?\t ?/g, '\t').trim(), size, gapBefore, page };
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared patterns                                                     */
+/* ------------------------------------------------------------------ */
+
+const MONTH = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?';
+const DATE = `(?:${MONTH}\\s+(?:\\d{1,2},?\\s+)?)?(?:19|20)\\d{2}`;
+const RANGE_RE = new RegExp(`(${DATE})\\s*(?:–|—|-|to|until)\\s*(${DATE}|present|current|now|to date)`, 'i');
+const DATE_RE = new RegExp(`(${MONTH}\\s+\\d{1,2},?\\s+(?:19|20)\\d{2}|${DATE}|expected\\s+${DATE})`, 'i');
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const PHONE_RE = /(?:\+?63[\s-]?|0)9\d{2}[\s-]?\d{3}[\s-]?\d{4}|\+?\d[\d\s()-]{7,}\d/;
+const URL_RE = /\b(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9-]+\.)+(?:com|ph|net|org|io|dev|me|co|app|site|xyz|info)(?:\.[a-z]{2})?(?:\/[^\s|·,]*)?/i;
+const BULLET_RE = /^[•●▪◦‣∙·*\-–]\s*/;
+
+const titleCase = (s) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+const clean = (s) => String(s || '').replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+const stripPunct = (s) => s.replace(/^[\s|·•,;:–—-]+|[\s|·•,;:–—-]+$/g, '');
+
+/** Pull a date range ("Jan 2024 – Present") out of a line. */
+function takeRange(text) {
+  const m = RANGE_RE.exec(text);
+  if (!m) return null;
+  const end = /present|current|now|to date/i.test(m[2]) ? '' : m[2];
+  return { start: clean(m[1]), end: clean(end), current: !end, rest: stripPunct(clean(text.replace(m[0], ' '))) };
+}
+
+/** Pull a single trailing/standalone date ("July 2024", "2023") out of a line. */
+function takeDate(text) {
+  const parts = text.split('\t');
+  const last = parts[parts.length - 1];
+  if (parts.length > 1 && DATE_RE.test(last) && last.replace(DATE_RE, '').trim().length < 4) {
+    return { date: clean(last), rest: stripPunct(clean(parts.slice(0, -1).join(' '))) };
+  }
+  const m = new RegExp(`(?:^|[\\s,(|·-])(${DATE_RE.source})\\)?\\s*$`, 'i').exec(text);
+  if (m) return { date: clean(m[1]), rest: stripPunct(clean(text.slice(0, m.index))) };
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Document type guess                                                 */
+/* ------------------------------------------------------------------ */
+
+export function looksLikeLetter(lines) {
+  const text = lines.map((l) => l.text).join('\n');
+  const letterish = /^\s*(dear|to whom it may concern)\b/im.test(text) && /^\s*(sincerely|respectfully|very truly yours|best regards|regards|yours (truly|faithfully|sincerely))/im.test(text);
+  const sections = lines.filter((l) => headingOf(l.text)).length;
+  return letterish && sections < 2;
+}
+
+/* ------------------------------------------------------------------ */
+/* Resume                                                              */
+/* ------------------------------------------------------------------ */
+
+const HEADINGS = [
+  ['summary', /^(professional |career |personal )?(summary|profile|objective|about me|career objective|summary statement|professional profile)$/],
+  ['skills', /^(skills|key skills|technical skills|core skills|core competencies|competencies|skills (&|and) (abilities|competencies)|areas of expertise|expertise|qualifications)$/],
+  ['hard', /^(hard|technical|hard \/ technical) skills$/],
+  ['soft', /^(soft|interpersonal) skills$/],
+  ['experience', /^((work|professional|relevant|related|employment|internship|ojt|on-the-job)\s*)?(experience|history)s?$|^(employment|work) history$|^internships?$|^projects?$|^(academic|school|major) projects?$/],
+  ['responsibilities', /^(job |key )?(responsibilities|duties)$/],
+  ['accomplishments', /^(key )?(accomplishments|achievements)$/],
+  ['education', /^(education|educational (attainment|background)|academic (background|history)|education (&|and) (credentials|training))$/],
+  ['credentials', /^(certifications?|licenses?|licensure|certifications? (&|and) licenses?|licenses? (&|and) certifications?|eligibility|civil service eligibility|seminars?( (&|and) trainings?)?( attended)?|trainings?( (&|and) seminars?)?( attended)?|credentials)$/],
+  ['ignore', /^(character )?references?$|^personal (information|data|details|background)$|^(interests|hobbies|languages|awards|affiliations|organizations|declaration|certification)$/],
+];
+
+function headingOf(text) {
+  const t = clean(text).replace(/[:.]$/, '').toLowerCase();
+  if (!t || t.length > 45) return null;
+  const hit = HEADINGS.find(([, re]) => re.test(t));
+  return hit ? hit[0] : null;
+}
+
+function guessLinkType(url) {
+  if (/linkedin\./i.test(url)) return 'LinkedIn';
+  if (/facebook\.|fb\.com/i.test(url)) return 'Facebook';
+  if (/github\./i.test(url)) return 'GitHub';
+  if (/portfolio|behance|dribbble|vercel\.app|netlify\.app/i.test(url)) return 'Portfolio';
+  return LINK_TYPES.includes('Website') ? 'Website' : 'Other';
+}
+
+function splitName(full) {
+  const parts = clean(full).replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+  const out = { firstName: '', middleName: '', lastName: '', suffix: '' };
+  if (!parts.length) return out;
+  if (/^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1])) out.suffix = parts.pop();
+  const fix = (w) => (w === w.toUpperCase() && w.length > 2 ? titleCase(w) : w);
+  if (parts.length === 1) out.firstName = fix(parts[0]);
+  else if (parts.length === 2) [out.firstName, out.lastName] = parts.map(fix);
+  else {
+    // Filipino compound surnames: "Juan Santos Dela Cruz"
+    const particle = parts.findIndex((w, i) => i > 0 && /^(de|del|dela|delos|de los|san|sta\.?|sto\.?)$/i.test(w));
+    const lastStart = particle > 1 ? particle : parts.length - 1;
+    out.firstName = parts.slice(0, Math.max(1, lastStart - 1)).map(fix).join(' ');
+    out.middleName = lastStart - 1 >= 1 ? fix(parts[lastStart - 1]) : '';
+    out.lastName = parts.slice(lastStart).map(fix).join(' ');
+  }
+  return out;
+}
+
+const ADDRESS_HINT = /\b(st\.?|street|ave\.?|avenue|road|rd\.?|brgy\.?|barangay|city|province|purok|sitio|village|subd\.?|subdivision|metro manila|ncr|municipality|blk|lot|zone|phase)\b|\d{4}\s*$/i;
+
+function parseHeader(lines) {
+  const personal = {};
+  if (!lines.length) return personal;
+  const biggest = lines.reduce((a, b) => (b.size > a.size ? b : a), lines[0]);
+  const nameLine = biggest.size >= lines[0].size * 1.15 ? biggest : lines[0];
+  Object.assign(personal, splitName(nameLine.text.split('\t')[0]));
+
+  const segments = lines
+    .filter((l) => l !== nameLine)
+    .flatMap((l) => l.text.split(/\t|\s[|•·]\s|\s{3,}/))
+    .map(clean)
+    .filter(Boolean);
+
+  for (const seg of segments) {
+    const email = EMAIL_RE.exec(seg);
+    if (email && !personal.email) { personal.email = email[0]; continue; }
+    const url = !email && URL_RE.exec(seg);
+    if (url && !personal.link) { personal.link = url[0].replace(/[).,]+$/, ''); personal.linkType = guessLinkType(url[0]); continue; }
+    const phone = PHONE_RE.exec(seg);
+    if (phone && !personal.phone && phone[0].replace(/\D/g, '').length >= 7 && !ADDRESS_HINT.test(seg.replace(phone[0], ''))) {
+      personal.phone = clean(phone[0]);
+      continue;
+    }
+    if (!personal.address && (ADDRESS_HINT.test(seg) || (seg.match(/,/g) || []).length >= 2)) {
+      const zip = /\b(\d{4})\s*$/.exec(seg);
+      personal.address = stripPunct(zip ? seg.slice(0, zip.index) : seg);
+      if (zip) personal.zip = zip[1];
+      continue;
+    }
+    if (!personal.title && seg.length <= 60 && !/\d{3}/.test(seg) && !/^(address|email|phone|mobile|contact)\b/i.test(seg)) {
+      personal.title = seg;
+    }
+  }
+  return personal;
+}
+
+/** Lines → bullet items. A line continues the previous item when it starts in lowercase (a wrapped line). */
+function toItems(lines) {
+  const items = [];
+  for (const l of lines) {
+    const t = clean(l.text);
+    if (!t) continue;
+    if (BULLET_RE.test(t)) items.push(t.replace(BULLET_RE, ''));
+    else if (items.length && /^[a-z(&,]/.test(t)) items[items.length - 1] += ' ' + t;
+    else items.push(t);
+  }
+  return items.map((s) => s.trim()).filter(Boolean);
+}
+
+function splitReference(text) {
+  const contact = PHONE_RE.exec(text) || EMAIL_RE.exec(text);
+  return {
+    referenceName: stripPunct(contact ? text.replace(contact[0], '') : text),
+    referenceContact: contact ? clean(contact[0]) : '',
+  };
+}
+
+function experienceType(text) {
+  if (/\b(ojt|on[- ]the[- ]job|intern(ship)?|practicum)\b/i.test(text)) return 'OJT / Internship';
+  if (/\bapprentic/i.test(text)) return 'Apprenticeship';
+  if (/\b(capstone|thesis|school project|academic project|project)\b/i.test(text)) return 'School Project';
+  return EXPERIENCE_TYPES[0];
+}
+
+/**
+ * Experience entries start at a line with a date range ("Jan 2024 – Present").
+ * The next plain line is "Organization | Location | Type"; bullet lines become
+ * responsibilities, or accomplishments when they contain a number (unless the
+ * PDF labels them explicitly).
+ */
+function parseExperience(lines) {
+  const entries = [];
+  let cur = null;
+  let bucket = null;
+  const pending = []; // plain lines seen before the first dated line
+
+  // A short, plain line right before a date line is usually that entry's title.
+  const takeTitleBefore = () => {
+    const src = cur ? cur._lines : pending;
+    const last = src[src.length - 1];
+    if (last && !BULLET_RE.test(last.text) && clean(last.text).length < 70 && !/[.;]$/.test(clean(last.text))) {
+      src.pop();
+      return clean(last.text);
+    }
+    return '';
+  };
+
+  for (const l of lines) {
+    const head = headingOf(l.text);
+    if (head === 'responsibilities' || head === 'accomplishments') { bucket = head; continue; }
+    const plain = clean(l.text);
+    const range = !BULLET_RE.test(l.text) && takeRange(l.text);
+    if (range) {
+      const title = range.rest.split('\t')[0] || takeTitleBefore();
+      cur = {
+        type: EXPERIENCE_TYPES[0], role: title, organization: '', location: '', website: '',
+        referenceName: '', referenceContact: '', start: range.start, end: range.end, current: range.current, _lines: [],
+      };
+      bucket = null;
+      entries.push(cur);
+      continue;
+    }
+    if (!cur) { pending.push(l); continue; }
+
+    if (/^reference\s*:/i.test(plain)) { Object.assign(cur, splitReference(plain.replace(/^reference\s*:\s*/i, ''))); continue; }
+    const url = URL_RE.exec(plain);
+    if (url && !cur.website && !cur._lines.length && plain.length < 120 && !BULLET_RE.test(l.text)) {
+      cur.website = url[0];
+      const ref = /reference\s*:\s*(.+)$/i.exec(plain);
+      if (ref) Object.assign(cur, splitReference(ref[1]));
+      continue;
+    }
+    if (!BULLET_RE.test(l.text) && !cur.organization && !cur._lines.length && bucket === null) {
+      const parts = plain.split(/\s*[|·•]\s*|\s+[–—]\s+|\s+-\s+/).map(clean).filter(Boolean);
+      cur.organization = parts[0] || '';
+      cur.location = parts.find((p, i) => i > 0 && !/\b(ojt|intern|apprentic|project|experience)\b/i.test(p)) || '';
+      cur.type = experienceType(`${plain} ${cur.role}`);
+      continue;
+    }
+    cur._lines.push({ ...l, bucket });
+  }
+
+  for (const e of entries) {
+    const by = (b) => e._lines.filter((l) => l.bucket === b);
+    const labelled = by('responsibilities').length || by('accomplishments').length;
+    const auto = toItems(by(null));
+    const resp = [...toItems(by('responsibilities')), ...(labelled ? auto : auto.filter((s) => !/\d/.test(s)))];
+    const acc = [...toItems(by('accomplishments')), ...(labelled ? [] : auto.filter((s) => /\d/.test(s)))];
+    e.responsibilities = resp.join('\n');
+    e.accomplishments = acc.join('\n');
+    delete e._lines;
+  }
+  return entries;
+}
+
+const DEGREE_RE = /\b(bachelor|master|doctor|ph\.?d|b\.?s\.?|b\.?a\.?|m\.?s\.?|m\.?a\.?|mba|associate|diploma|certificate in|senior high|junior high|high school|secondary|elementary|primary|strand|stem|abm|humss|gas|tvl|course)\b/i;
+const SCHOOL_RE = /\b(university|college|school|institute|academy|polytechnic|colegio|universidad|lyceum|ateneo|tesda)\b/i;
+const HONOR_RE = /\b(laude|honou?rs?|dean['’]?s list(er)?|valedictorian|salutatorian|scholar|with distinction|award(ee)?)\b/i;
+
+function parseEducation(lines) {
+  const entries = [];
+  let cur = null;
+  const start = () => { cur = { degree: '', institution: '', graduation: '', honors: '' }; entries.push(cur); };
+  for (const l of lines) {
+    let t = clean(l.text.replace(BULLET_RE, ''));
+    if (!t) continue;
+    const range = takeRange(l.text);
+    const single = !range && takeDate(l.text);
+    let date = '';
+    if (range) { date = range.end || 'Present'; t = range.rest; }
+    else if (single) { date = single.date; t = single.rest; }
+    if (!t && date) { if (cur && !cur.graduation) cur.graduation = date; continue; }
+
+    const isDegree = DEGREE_RE.test(t) && !SCHOOL_RE.test(t.split(/[|,·]/)[0]);
+    const isSchool = SCHOOL_RE.test(t);
+    const isHonor = HONOR_RE.test(t) && t.length < 80;
+
+    if (isHonor && cur && !isDegree) { cur.honors = cur.honors ? `${cur.honors}, ${t}` : t; continue; }
+    if (isDegree) {
+      if (!cur || cur.degree) start();
+      cur.degree = t;
+    } else if (isSchool) {
+      if (!cur || cur.institution) start();
+      cur.institution = t.split(/\s*[|·]\s*/)[0];
+    } else if (cur && !cur.institution) cur.institution = t;
+    else if (!cur) { start(); cur.degree = t; }
+    if (date && cur && !cur.graduation) cur.graduation = date;
+  }
+  return entries.filter((e) => e.degree || e.institution);
+}
+
+/**
+ * Certifications: a bullet or dated line starts a new item ("Name  ·  Date");
+ * one following plain line is taken as "Issuer | License No. 123".
+ */
+function parseCredentials(lines) {
+  const entries = [];
+  let cur = null;
+  for (const l of lines) {
+    const t = clean(l.text.replace(BULLET_RE, ''));
+    if (!t) continue;
+    const bullet = BULLET_RE.test(l.text);
+    const dated = takeDate(l.text);
+    const continuation = cur && !bullet && !dated && !cur._hasDetail && !/[.:]$/.test(cur.name);
+    if (continuation) {
+      cur._hasDetail = true;
+      const license = /(?:license|certificate|cert\.?|reg(?:istration)?)\s*(?:no\.?|number|#)\s*:?\s*([\w-]+)/i.exec(t);
+      if (license) cur.number = license[1];
+      const parts = t.split(/\s*[|·]\s*/).filter((p) => !/(license|certificate)\s*(no|number|#)/i.test(p));
+      if (parts[0]) cur.issuer = parts[0];
+      continue;
+    }
+    let name = dated ? dated.rest || t : t;
+    let issuer = '';
+    const split = /\s+[|·–—]\s+|\s+-\s+/.exec(name);
+    if (split) { issuer = clean(name.slice(split.index + split[0].length)); name = clean(name.slice(0, split.index)); }
+    cur = { name, issuer, date: dated ? dated.date : '', number: '', _hasDetail: !!issuer };
+    entries.push(cur);
+  }
+  return entries.map(({ _hasDetail, ...e }) => e).filter((e) => e.name);
+}
+
+/** Heuristic resume parser → partial resume state. */
+export function parseResume(lines) {
+  const sections = { header: [] };
+  let current = 'header';
+  let skillBucket = 'hard';
+  const skills = { hard: [], soft: [] };
+
+  for (const l of lines) {
+    const head = headingOf(l.text);
+    if (head === 'hard' || head === 'soft') { current = 'skills'; skillBucket = head; continue; }
+    if (head && head !== 'responsibilities' && head !== 'accomplishments') {
+      current = head;
+      if (head === 'skills') skillBucket = 'hard';
+      sections[current] = sections[current] || [];
+      continue;
+    }
+    if (current === 'skills') { skills[skillBucket].push(l); continue; }
+    (sections[current] = sections[current] || []).push(l);
+  }
+
+  const splitSkills = (ls) =>
+    ls.flatMap((l) => l.text.replace(/^[A-Za-z /&]{3,30}:\s*/, '').split(/\t|[,;|•·]|\s{2,}/))
+      .map((s) => clean(s.replace(BULLET_RE, '')))
+      .filter((s) => s && s.length <= 60);
+
+  return {
+    personal: parseHeader(sections.header || []),
+    summary: { text: clean((sections.summary || []).map((l) => l.text).join(' ')) },
+    skills: { hard: splitSkills(skills.hard).join(', '), soft: splitSkills(skills.soft).join(', ') },
+    experience: parseExperience(sections.experience || []),
+    education: parseEducation(sections.education || []),
+    credentials: parseCredentials(sections.credentials || []),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Cover letter                                                        */
+/* ------------------------------------------------------------------ */
+
+const CLOSE_RE = /^(sincerely|respectfully( yours)?|very truly yours|yours (truly|faithfully|sincerely)|best regards|kind regards|warm regards|regards|thank you|with gratitude)\s*,?$/i;
+const LETTER_DATE_RE = new RegExp(`^(${MONTH}\\s+\\d{1,2},?\\s+(?:19|20)\\d{2}|\\d{1,2}\\s+${MONTH}\\s+(?:19|20)\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-](?:19|20)\\d{2})$`, 'i');
+
+function toIsoDate(text) {
+  const d = new Date(text.replace(/(\d)(st|nd|rd|th)/, '$1'));
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Group lines into paragraphs using the vertical gap between them. */
+function paragraphs(lines) {
+  const out = [];
+  for (const l of lines) {
+    const t = clean(l.text);
+    if (!t) continue;
+    if (!out.length || l.gapBefore > l.size * 1.75 || l.page !== out[out.length - 1].page && /^[A-Z]/.test(t) && /[.!?]$/.test(out[out.length - 1].text)) {
+      out.push({ text: t, page: l.page });
+    } else {
+      out[out.length - 1].text += (out[out.length - 1].text.endsWith('-') ? '' : ' ') + t;
+      out[out.length - 1].page = l.page;
+    }
+  }
+  return out.map((p) => p.text);
+}
+
+/** Heuristic cover letter parser → partial letter state. */
+export function parseLetter(lines) {
+  const texts = lines.map((l) => clean(l.text));
+  const salIdx = texts.findIndex((t) => /^(dear\b|to whom it may concern|good day)/i.test(t));
+  const closeIdx = texts.findIndex((t, i) => i > salIdx && CLOSE_RE.test(t));
+  const dateIdx = texts.findIndex((t, i) => (salIdx < 0 || i < salIdx) && LETTER_DATE_RE.test(t));
+  const reIdx = texts.findIndex((t, i) => (salIdx < 0 || i < salIdx) && /^(re|subject|subj)\s*:/i.test(t));
+
+  const recipient = { date: '', name: '', title: '', company: '', address: '' };
+  if (dateIdx >= 0) recipient.date = toIsoDate(texts[dateIdx]);
+
+  const recStart = dateIdx >= 0 ? dateIdx + 1 : 0;
+  const recEnd = [reIdx, salIdx].filter((i) => i >= 0).reduce((a, b) => Math.min(a, b), texts.length);
+  const rec = texts.slice(recStart, recEnd).filter(Boolean);
+  // If there was no date, the lines before the recipient might be the sender's header: keep the last block.
+  const block = dateIdx >= 0 ? rec : rec.slice(-4);
+  const isCompany = (t) => /\b(inc\.?|corp\.?|corporation|company|co\.|ltd\.?|llc|enterprises?|group|solutions|services|bank|university|college|hospital|agency|digital|technologies|foundation)\b/i.test(t);
+  if (block.length) {
+    let i = 0;
+    if (!isCompany(block[0]) && !ADDRESS_HINT.test(block[0])) recipient.name = block[i++];
+    if (block[i] && !isCompany(block[i]) && !ADDRESS_HINT.test(block[i]) && block[i].length < 60) recipient.title = block[i++];
+    if (block[i] && !ADDRESS_HINT.test(block[i]) || block[i] && isCompany(block[i])) recipient.company = block[i++];
+    recipient.address = block.slice(i).join(', ');
+  }
+
+  const content = { position: '', salutation: '', opening: '', body: '', closing: '' };
+  if (reIdx >= 0) {
+    const re = texts[reIdx].replace(/^(re|subject|subj)\s*:\s*/i, '');
+    content.position = clean(re.replace(/^(application|applying)\s+(for|as)\s+(the\s+)?(position\s+of\s+)?/i, '').replace(/\s+position$/i, ''));
+  }
+  if (salIdx >= 0) {
+    const sal = texts[salIdx];
+    content.salutation = /^dear hiring manager:?$/i.test(sal) ? '' : sal;
+  }
+
+  const bodyLines = lines.slice(salIdx >= 0 ? salIdx + 1 : recEnd, closeIdx >= 0 ? closeIdx : lines.length);
+  const paras = paragraphs(bodyLines);
+  if (!content.position) {
+    const m = /(?:apply|application)\s+for\s+(?:the\s+)?(?:position\s+of\s+)?([A-Z][\w/&,.' -]{2,60}?)\s+(?:position|role|at|with|in)\b/.exec(paras[0] || '');
+    if (m) content.position = clean(m[1]);
+  }
+  if (paras.length === 1) content.opening = paras[0];
+  else if (paras.length === 2) [content.opening, content.closing] = paras;
+  else if (paras.length > 2) {
+    content.opening = paras[0];
+    content.closing = paras[paras.length - 1];
+    content.body = paras.slice(1, -1).join('\n\n');
+  }
+
+  const signoff = { name: '', complimentary: 'Sincerely,', enclosure: false };
+  if (closeIdx >= 0) {
+    const close = texts[closeIdx].replace(/,?$/, ',');
+    signoff.complimentary = COMPLIMENTARY_CLOSES.find((c) => c.toLowerCase() === close.toLowerCase()) || 'Sincerely,';
+    const after = texts.slice(closeIdx + 1).filter(Boolean);
+    const nameLine = after.find((t) => !/^enclosures?\s*:/i.test(t) && !EMAIL_RE.test(t) && !PHONE_RE.test(t));
+    if (nameLine && nameLine.length < 60) signoff.name = nameLine;
+    signoff.enclosure = after.some((t) => /^enclosures?\s*:/i.test(t));
+  }
+
+  return { recipient, content, signoff };
+}
