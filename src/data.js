@@ -2,7 +2,11 @@
 // Deliberately excludes age, birthdate, sex, religion, civil status and nationality.
 import { checkEmail, checkMeasurable, checkPhone, checkSummary, checkUrl, checkVerbs, checkZip } from './coach.js';
 
-export const EXPERIENCE_TYPES = ['Work Experience', 'OJT / Internship', 'Apprenticeship', 'School Project'];
+export const EXPERIENCE_TYPES = ['Work Experience', 'OJT / Internship', 'Apprenticeship', 'School Project', 'Other'];
+
+/** The label shown on the resume for an experience type (blank for plain work experience). */
+export const experienceLabel = (e) =>
+  e.type === 'Other' ? String(e.typeOther || '').trim() : e.type === 'Work Experience' ? '' : e.type;
 
 /** One optional professional link in the header; the type picks the icon. */
 export const LINK_TYPES = ['LinkedIn', 'Facebook', 'GitHub', 'Portfolio', 'Website', 'Other'];
@@ -65,10 +69,14 @@ export const SECTIONS = [
     desc: 'Work, OJT, apprenticeship or major school projects — most recent first.',
     kind: 'list',
     addLabel: 'Add experience',
-    blank: () => ({ type: 'Work Experience', role: '', organization: '', location: '', website: '', referenceName: '', referenceContact: '', start: '', end: '', current: false, responsibilities: '', accomplishments: '' }),
-    itemTitle: (it) => [it.role || 'Untitled role', it.organization || it.type],
+    blank: () => ({ type: 'Work Experience', typeOther: '', role: '', organization: '', location: '', website: '', referenceName: '', referenceContact: '', start: '', end: '', current: false, responsibilities: '', accomplishments: '' }),
+    itemTitle: (it) => [it.role || 'Untitled role', it.organization || experienceLabel(it) || it.type],
     fields: [
       { key: 'type', label: 'Type', type: 'select', options: EXPERIENCE_TYPES },
+      {
+        key: 'typeOther', label: 'Specify type', placeholder: 'e.g. Volunteer Work, Part-time, Freelance',
+        showWhen: (it) => it.type === 'Other',
+      },
       { key: 'role', label: 'Role / Project title', placeholder: 'Customer Service Intern' },
       { key: 'organization', label: 'Organization / School', placeholder: 'ABC Corporation' },
       { key: 'location', label: 'Location', placeholder: 'Makati City' },

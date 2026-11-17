@@ -104,7 +104,7 @@ function ListBody({ section: s, items, update, setList, notify }) {
               </div>
               <div className="item-body">
                 <div className="grid">
-                  {s.fields.map((f) => (
+                  {s.fields.filter((f) => !f.showWhen || f.showWhen(it)).map((f) => (
                     <Field
                       key={f.key}
                       field={f}

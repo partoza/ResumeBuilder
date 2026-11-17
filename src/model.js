@@ -1,5 +1,6 @@
 // Normalizes form data into the exact content shown on the resume.
 // Both the on-screen preview and the PDF generator render from this, so they always match.
+import { experienceLabel } from './data.js';
 import { fullName, has, range, splitLines, splitList, toLink } from './utils.js';
 
 // Icon per profile link type (see LINK_TYPES in data.js).
@@ -13,7 +14,7 @@ export function buildModel(d) {
     .filter((e) => has(e.role) || has(e.organization))
     .map((e) => ({
       role: e.role.trim(),
-      meta: [e.organization, e.location, e.type !== 'Work Experience' ? e.type : ''].filter(has).map((x) => x.trim()).join(' | '),
+      meta: [e.organization, e.location, experienceLabel(e)].filter(has).map((x) => x.trim()).join(' | '),
       dates: range(e.start, e.current ? 'Present' : e.end),
       website: toLink(e.website),
       reference: [e.referenceName, e.referenceContact].filter(has).map((x) => x.trim()).join(', '),

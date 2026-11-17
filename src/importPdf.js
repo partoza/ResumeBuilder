@@ -437,7 +437,7 @@ function parseExperience(lines) {
     if (range) {
       const title = range.rest.split('\t')[0] || takeTitleBefore();
       cur = {
-        type: EXPERIENCE_TYPES[0], role: title, organization: '', location: '', website: '',
+        type: EXPERIENCE_TYPES[0], typeOther: '', role: title, organization: '', location: '', website: '',
         referenceName: '', referenceContact: '', start: range.start, end: range.end, current: range.current, _lines: [],
       };
       bucket = null;
@@ -456,9 +456,18 @@ function parseExperience(lines) {
     }
     if (!BULLET_RE.test(l.text) && !cur.organization && !cur._lines.length && bucket === null) {
       const parts = plain.split(/\s*[|·•]\s*|\s+[–—]\s+|\s+-\s+/).map(clean).filter(Boolean);
+      // "Organization | Location | Type" — the type label is optional and may be custom.
+      const known = (p) => EXPERIENCE_TYPES.some((t) => t !== 'Other' && t.toLowerCase() === p.toLowerCase());
+      const typeLike = (p) => known(p) || /\b(ojt|intern|apprentic|project|experience|volunteer|freelance|part[- ]time|full[- ]time|contract|seasonal|work)\b/i.test(p);
       cur.organization = parts[0] || '';
-      cur.location = parts.find((p, i) => i > 0 && !/\b(ojt|intern|apprentic|project|experience)\b/i.test(p)) || '';
-      cur.type = experienceType(`${plain} ${cur.role}`);
+      const rest = parts.slice(1);
+      let label = '';
+      if (rest.length >= 2) label = rest[rest.length - 1];
+      else if (rest.length === 1 && typeLike(rest[0])) label = rest[0];
+      cur.location = rest.find((p) => p !== label) || '';
+      if (label && known(label)) cur.type = EXPERIENCE_TYPES.find((t) => t.toLowerCase() === label.toLowerCase());
+      else if (label) { cur.type = 'Other'; cur.typeOther = label; }
+      else cur.type = experienceType(`${plain} ${cur.role}`);
       continue;
     }
     cur._lines.push({ ...l, bucket });
