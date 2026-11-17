@@ -331,51 +331,59 @@ async function createPdf(kind, m) {
   rule(y, 2 * PX, INK);
   y += 2 * PX;
 
-  /** Block-format business letter body (mirrors .r-letter styles). */
+  /**
+   * Standard business-letter format (mirrors .paper-letter styles):
+   * 1in margins, Times 12pt black, single-spaced (1.15), one blank line between
+   * parts and three blank lines for the signature. Times is a built-in PDF font,
+   * so text stays fully extractable for ATS.
+   */
   function drawLetter() {
-    const block = (lines, first = 'I400', firstColor = INK2) =>
-      lines.forEach((ln, i) => {
-        const [name, color] = i === 0 ? [first, firstColor] : ['I400', INK2];
-        font(name, 10.5, color);
-        for (const w of wrap(ln, width)) {
-          ensure(lh(10.5));
-          text(w, left, y, 10.5);
-          y += lh(10.5);
-        }
-      });
+    const SIZE = 12;
+    const LINE = SIZE * 1.15 * PT; // single spacing
+    const M = 25.4; // 1 inch
+    const lx = M;
+    const lw = PAGE.w - 2 * M;
+    const lbottom = PAGE.h - M;
+    // Times ascent 0.891em, descent 0.216em, centred in the 1.15 line box.
+    const base = ((1.15 - 1.107) / 2 + 0.891) * SIZE * PT;
+    let ly = M;
 
-    if (m.date) block([m.date]);
-    if (m.recipient.length) {
-      if (m.date) y += 20 * PX;
-      block(m.recipient, 'I600', INK);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(SIZE);
+    doc.setTextColor(0, 0, 0);
+
+    const line = (str) => {
+      if (ly + LINE > lbottom + 0.01) {
+        doc.addPage();
+        ly = M;
+      }
+      doc.text(str, lx, ly + base, { baseline: 'alphabetic' });
+      ly += LINE;
+    };
+    const lines = (str) => doc.splitTextToSize(pdfText(str), lw).forEach(line);
+    const blank = (n = 1) => { ly += LINE * n; };
+    let first = true;
+    const part = (strs) => {
+      if (!first) blank();
+      first = false;
+      strs.forEach(lines);
+    };
+
+    if (m.date) part([m.date]);
+    if (m.recipient.length) part(m.recipient);
+    if (m.subject) part([m.subject]);
+    part([m.salutation]);
+    m.paragraphs.forEach((para) => part([para]));
+    // Keep the close, signature space and name together on one page.
+    if (ly + LINE * 6 > lbottom) {
+      doc.addPage();
+      ly = M;
+      first = true;
     }
-    if (m.subject) {
-      y += 20 * PX;
-      block([m.subject], 'I600', INK);
-    }
-    y += 16 * PX;
-    block([m.salutation], 'I400', INK);
-    for (const para of m.paragraphs) {
-      y += 12 * PX;
-      paragraph(para);
-    }
-    y += 20 * PX;
-    ensure(lh(10.5) * 2 + 44 * PX);
-    font('I400', 10.5, INK);
-    text(m.complimentary, left, y, 10.5);
-    y += lh(10.5) + 44 * PX;
-    if (m.name) {
-      font('I600', 10.5, INK);
-      text(m.name, left, y, 10.5);
-      y += lh(10.5);
-    }
-    if (m.enclosure) {
-      y += 20 * PX;
-      ensure(lh(9.5));
-      font('I400', 9.5, INK3);
-      text(m.enclosure, left, y, 9.5);
-      y += lh(9.5);
-    }
+    part([m.complimentary]);
+    blank(3);
+    if (m.name) lines(m.name);
+    if (m.enclosure) part([m.enclosure]);
   }
 
   /* ---------- summary ---------- */

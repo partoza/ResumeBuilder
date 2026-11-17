@@ -425,18 +425,21 @@ button { font: inherit; color: inherit; }
 
 .r-placeholder { color: #a1a1aa; }
 
-/* Cover letter (block format) — mirrors drawLetter() in exportPdf.js */
-.r-letter { font-size: 10.5pt; line-height: 1.5; color: var(--ink-2); }
-.r-letter p { margin: 0; }
-.r-letter .l-date { margin-top: 0; }
-.r-letter .l-recipient { margin-top: 20px; font-style: normal; }
-.r-letter .l-strong { font-weight: 600; color: var(--ink); }
-.r-letter .l-subject { margin-top: 20px; font-weight: 600; color: var(--ink); }
-.r-letter .l-salutation { margin-top: 16px; color: var(--ink); }
-.r-letter .l-para { margin-top: 12px; }
-.r-letter .l-close { margin-top: 20px; color: var(--ink); }
-.r-letter .l-sign-space { height: 44px; }
-.r-letter .l-enclosure { margin-top: 20px; font-size: 9.5pt; color: var(--ink-3); }
+/* Cover letter — standard business format, mirrors drawLetter() in exportPdf.js:
+   1in margins, Times New Roman 12pt, single-spaced (1.15), one blank line between parts,
+   three blank lines for the signature. */
+.paper.paper-letter {
+  padding: 96px;                       /* 1 inch on every side */
+  font-family: "Times New Roman", Times, "Liberation Serif", serif;
+  font-size: 12pt;
+  line-height: 1.15;
+  color: #000;
+  -webkit-font-smoothing: auto;
+}
+.r-letter { font-size: 12pt; line-height: 1.15; color: #000; }
+.r-letter p, .r-letter address { margin: 0; font-style: normal; }
+.r-letter .l-block { margin-top: 1.15em; }          /* one blank line */
+.r-letter .l-name { margin-top: calc(1.15em * 3); } /* three blank lines to sign */
 
 /* ============ Toast ============ */
 .toast {
