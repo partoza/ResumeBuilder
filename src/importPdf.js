@@ -55,17 +55,102 @@ export async function readPdf(file) {
     if (!embedded) embedded = extractEmbedded(new TextDecoder('latin1').decode(bytes));
     if (embedded) return { embedded, lines: [] };
 
-    // 2) Text lines for heuristic parsing.
+    // 2) Text lines for heuristic parsing, plus the profile photo if there is one.
     const lines = [];
     for (let n = 1; n <= Math.min(pdf.numPages, 10); n++) {
       const page = await pdf.getPage(n);
       const content = await page.getTextContent();
       lines.push(...toLines(content.items, n));
     }
-    return { embedded: null, lines };
+    let photo = '';
+    try {
+      photo = await extractPhoto(pdf, lib);
+    } catch (err) {
+      console.warn('Could not extract a photo from the PDF', err);
+    }
+    return { embedded: null, lines, photo };
   } finally {
     pdf.destroy();
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Photo                                                               */
+/* ------------------------------------------------------------------ */
+
+const PHOTO_MIN_PX = 120; // ignores icons and small logos
+const PHOTO_OUT_PX = 480;
+
+/** Resolve a pdf.js image object (page-level or shared). */
+function getImageObj(page, name) {
+  const store = String(name).startsWith('g_') ? page.commonObjs : page.objs;
+  return new Promise((resolve) => {
+    try {
+      if (store.has(name)) resolve(store.get(name));
+      else store.get(name, resolve);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** Draw a decoded pdf.js image onto a canvas. */
+function imageToCanvas(img) {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  if (img.bitmap) {
+    ctx.drawImage(img.bitmap, 0, 0);
+    return canvas;
+  }
+  if (!img.data) return null;
+  const out = ctx.createImageData(img.width, img.height);
+  const src = img.data;
+  const px = img.width * img.height;
+  if (src.length === px * 4) out.data.set(src);
+  else if (src.length === px * 3) {
+    for (let i = 0, j = 0; i < px; i++, j += 3) {
+      out.data[i * 4] = src[j];
+      out.data[i * 4 + 1] = src[j + 1];
+      out.data[i * 4 + 2] = src[j + 2];
+      out.data[i * 4 + 3] = 255;
+    }
+  } else return null; // 1-bit masks etc.: not a photo
+  ctx.putImageData(out, 0, 0);
+  return canvas;
+}
+
+/**
+ * Find the profile photo: the largest roughly-square picture on page 1.
+ * Returns a center-cropped square JPEG data URL, or ''.
+ */
+async function extractPhoto(pdf, lib) {
+  const page = await pdf.getPage(1);
+  const ops = await page.getOperatorList();
+  const IMAGE_OPS = new Set([lib.OPS.paintImageXObject, lib.OPS.paintInlineImageXObject].filter((x) => x !== undefined));
+  let best = null;
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    if (!IMAGE_OPS.has(ops.fnArray[i])) continue;
+    const arg = ops.argsArray[i][0];
+    const img = typeof arg === 'string' ? await getImageObj(page, arg) : arg;
+    if (!img || !img.width || !img.height) continue;
+    const ratio = img.width / img.height;
+    if (img.width < PHOTO_MIN_PX || img.height < PHOTO_MIN_PX || ratio < 0.6 || ratio > 1.6) continue;
+    if (!best || img.width * img.height > best.width * best.height) best = img;
+  }
+  if (!best) return '';
+  const src = imageToCanvas(best);
+  if (!src) return '';
+  const size = Math.min(src.width, src.height);
+  const outSize = Math.min(PHOTO_OUT_PX, size);
+  const out = document.createElement('canvas');
+  out.width = out.height = outSize;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, outSize, outSize);
+  ctx.drawImage(src, (src.width - size) / 2, (src.height - size) / 2, size, size, 0, 0, outSize, outSize);
+  return out.toDataURL('image/jpeg', 0.9);
 }
 
 /** Group pdf.js text items into lines (top-to-bottom, left-to-right). */
@@ -103,9 +188,10 @@ function toLines(items, page) {
       text += r.str;
       end = r.x + r.w;
     }
-    const gapBefore = prevY === null ? 0 : prevY - row.y;
+    const first = prevY === null; // first line on this page: no gap to measure
+    const gapBefore = first ? 0 : prevY - row.y;
     prevY = row.y;
-    return { text: text.replace(/[  ]+/g, ' ').replace(/ ?\t ?/g, '\t').trim(), size, gapBefore, page };
+    return { text: text.replace(/[  ]+/g, ' ').replace(/ ?\t ?/g, '\t').trim(), size, gapBefore, page, first };
   });
 }
 
@@ -119,7 +205,13 @@ const RANGE_RE = new RegExp(`(${DATE})\\s*(?:–|—|-|to|until)\\s*(${DATE}|pre
 const DATE_RE = new RegExp(`(${MONTH}\\s+\\d{1,2},?\\s+(?:19|20)\\d{2}|${DATE}|expected\\s+${DATE})`, 'i');
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE = /(?:\+?63[\s-]?|0)9\d{2}[\s-]?\d{3}[\s-]?\d{4}|\+?\d[\d\s()-]{7,}\d/;
-const URL_RE = /\b(?:https?:\/\/)?(?:www\.)?(?:[a-z0-9-]+\.)+(?:com|ph|net|org|io|dev|me|co|app|site|xyz|info)(?:\.[a-z]{2})?(?:\/[^\s|·,]*)?/i;
+const URL_RE = new RegExp(
+  '\\b(?:https?:\\/\\/)?(?:www\\.)?(?:[a-z0-9-]+\\.)+(?:' +
+    'com|ph|net|org|io|dev|me|co|app|site|xyz|info|online|tech|store|shop|biz|ai|gov|edu|page|link|website|digital|cloud|' +
+    'space|pro|design|studio|art|blog|live|life|world|today|agency|solutions|services|business|asia|us|uk|au|ca|sg' +
+    ')(?:\\.[a-z]{2})?(?![a-z])(?:\\/[^\\s|·,]*)?',
+  'i'
+);
 const BULLET_RE = /^[•●▪◦‣∙·*\-–]\s*/;
 
 const titleCase = (s) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
@@ -161,24 +253,37 @@ export function looksLikeLetter(lines) {
 /* Resume                                                              */
 /* ------------------------------------------------------------------ */
 
-const HEADINGS = [
-  ['summary', /^(professional |career |personal )?(summary|profile|objective|about me|career objective|summary statement|professional profile)$/],
-  ['skills', /^(skills|key skills|technical skills|core skills|core competencies|competencies|skills (&|and) (abilities|competencies)|areas of expertise|expertise|qualifications)$/],
-  ['hard', /^(hard|technical|hard \/ technical) skills$/],
-  ['soft', /^(soft|interpersonal) skills$/],
-  ['experience', /^((work|professional|relevant|related|employment|internship|ojt|on-the-job)\s*)?(experience|history)s?$|^(employment|work) history$|^internships?$|^projects?$|^(academic|school|major) projects?$/],
-  ['responsibilities', /^(job |key )?(responsibilities|duties)$/],
-  ['accomplishments', /^(key )?(accomplishments|achievements)$/],
-  ['education', /^(education|educational (attainment|background)|academic (background|history)|education (&|and) (credentials|training))$/],
-  ['credentials', /^(certifications?|licenses?|licensure|certifications? (&|and) licenses?|licenses? (&|and) certifications?|eligibility|civil service eligibility|seminars?( (&|and) trainings?)?( attended)?|trainings?( (&|and) seminars?)?( attended)?|credentials)$/],
-  ['ignore', /^(character )?references?$|^personal (information|data|details|background)$|^(interests|hobbies|languages|awards|affiliations|organizations|declaration|certification)$/],
-];
+// Section headings, matched on letters only ("E X P E R I E N C E", "Education & Credentials:",
+// "WORK-EXPERIENCE" all normalise to the same key), so letter-spacing and punctuation don't matter.
+const HEADING_WORDS = {
+  summary: ['summary', 'professional summary', 'career summary', 'personal summary', 'summary statement', 'profile', 'professional profile',
+    'objective', 'career objective', 'objectives', 'about me', 'about'],
+  skills: ['skills', 'key skills', 'technical skills', 'core skills', 'core competencies', 'competencies', 'skills and abilities',
+    'skills and competencies', 'areas of expertise', 'expertise', 'qualifications', 'skill set', 'skillset'],
+  hard: ['hard skills', 'hard technical skills', 'hard and technical skills'],
+  soft: ['soft skills', 'interpersonal skills'],
+  experience: ['experience', 'experiences', 'work experience', 'professional experience', 'relevant experience', 'related experience',
+    'employment history', 'employment', 'work history', 'internship', 'internships', 'ojt', 'ojt experience', 'internship experience',
+    'on the job training', 'projects', 'project', 'academic projects', 'school projects', 'major projects', 'work and projects'],
+  responsibilities: ['responsibilities', 'job responsibilities', 'key responsibilities', 'duties', 'duties and responsibilities'],
+  accomplishments: ['accomplishments', 'key accomplishments', 'achievements', 'key achievements'],
+  education: ['education', 'educational attainment', 'educational background', 'academic background', 'academic history',
+    'education and credentials', 'education and training', 'education and certifications'],
+  credentials: ['certifications', 'certification', 'certifications and licenses', 'licenses and certifications', 'licenses', 'license',
+    'licensure', 'eligibility', 'civil service eligibility', 'seminars', 'trainings', 'seminars and trainings', 'trainings and seminars',
+    'seminars and trainings attended', 'trainings attended', 'seminars attended', 'credentials'],
+  ignore: ['references', 'reference', 'character references', 'personal information', 'personal data', 'personal details',
+    'personal background', 'interests', 'hobbies', 'languages', 'awards', 'affiliations', 'organizations', 'declaration'],
+};
+const headingKey = (s) => String(s).toLowerCase().replace(/&/g, 'and').replace(/[^a-z]/g, '');
+const HEADING_INDEX = new Map(
+  Object.entries(HEADING_WORDS).flatMap(([kind, words]) => words.map((w) => [headingKey(w), kind]))
+);
 
 function headingOf(text) {
-  const t = clean(text).replace(/[:.]$/, '').toLowerCase();
-  if (!t || t.length > 45) return null;
-  const hit = HEADINGS.find(([, re]) => re.test(t));
-  return hit ? hit[0] : null;
+  const t = clean(text);
+  if (!t || t.length > 70 || BULLET_RE.test(t)) return null;
+  return HEADING_INDEX.get(headingKey(t)) || null;
 }
 
 function guessLinkType(url) {
@@ -246,17 +351,43 @@ function parseHeader(lines) {
   return personal;
 }
 
-/** Lines → bullet items. A line continues the previous item when it starts in lowercase (a wrapped line). */
+/**
+ * Lines → bullet items.
+ * - A bullet character always starts a new item.
+ * - If the list has two line spacings (wrapped lines tight, items slightly apart — how this
+ *   app draws its bullets), the larger gap starts a new item.
+ * - Otherwise a line that starts in lowercase continues the previous item.
+ */
 function toItems(lines) {
+  const ls = lines.filter((l) => clean(l.text));
+  const wide = (l) => l.gapBefore > l.size * 1.57;
+  const rest = ls.slice(1).filter((l) => !BULLET_RE.test(l.text));
+  const useGaps = rest.some(wide) && rest.some((l) => !wide(l) && l.gapBefore > 0);
+
   const items = [];
-  for (const l of lines) {
+  for (const l of ls) {
     const t = clean(l.text);
-    if (!t) continue;
     if (BULLET_RE.test(t)) items.push(t.replace(BULLET_RE, ''));
-    else if (items.length && /^[a-z(&,]/.test(t)) items[items.length - 1] += ' ' + t;
+    else if (!items.length) items.push(t);
+    else if (useGaps && !l.first ? !wide(l) : /^[a-z(&,]/.test(t)) items[items.length - 1] += ' ' + t;
     else items.push(t);
   }
   return items.map((s) => s.trim()).filter(Boolean);
+}
+
+/** Date part of an entry's title row: a range, or a right-aligned single date / "Present". */
+function takeEntryDate(text) {
+  if (BULLET_RE.test(text)) return null;
+  const range = takeRange(text);
+  if (range) return range;
+  const parts = text.split('\t');
+  if (parts.length < 2) return null;
+  const last = clean(parts[parts.length - 1]);
+  const rest = stripPunct(clean(parts.slice(0, -1).join(' ')));
+  if (!rest) return null;
+  if (/^(present|current|now|to date|ongoing)$/i.test(last)) return { start: '', end: '', current: true, rest };
+  if (new RegExp(`^${DATE}$`, 'i').test(last)) return { start: last, end: '', current: false, rest };
+  return null;
 }
 
 function splitReference(text) {
@@ -301,7 +432,7 @@ function parseExperience(lines) {
     const head = headingOf(l.text);
     if (head === 'responsibilities' || head === 'accomplishments') { bucket = head; continue; }
     const plain = clean(l.text);
-    const range = !BULLET_RE.test(l.text) && takeRange(l.text);
+    const range = takeEntryDate(l.text);
     if (range) {
       const title = range.rest.split('\t')[0] || takeTitleBefore();
       cur = {

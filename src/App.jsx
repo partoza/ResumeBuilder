@@ -361,7 +361,7 @@ export default function App() {
     setImporting(true);
     try {
       const { readPdf, parseResume, parseLetter, looksLikeLetter, ImportError } = await import('./importPdf.js');
-      const { embedded, lines } = await readPdf(file);
+      const { embedded, lines, photo } = await readPdf(file);
       if (!embedded && !lines.some((l) => l.text)) {
         throw new ImportError('No selectable text found — it may be a scanned image. Please type your details instead.');
       }
@@ -383,6 +383,7 @@ export default function App() {
         if (!embedded) {
           // Keep one empty entry in sections the PDF didn't have, like a fresh form.
           source = Object.fromEntries(Object.entries(source).filter(([, v]) => !Array.isArray(v) || v.length));
+          if (photo) source.personal = { ...source.personal, photo };
         }
         setData(withAllIds(hydrateResume(source)));
       } else {
