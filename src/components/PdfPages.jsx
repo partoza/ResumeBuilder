@@ -18,11 +18,10 @@ function tagSegments(textLayer, segs) {
     if (!t) continue;
     for (let k = j; k < Math.min(segs.length, j + 6); k++) {
       if (segs[k].str.trim() === t) {
-        span.dataset.para = String(segs[k].para);
-        if (segs[k].para >= 0) {
-          span.dataset.start = String(segs[k].start);
-          span.dataset.len = String(segs[k].str.length);
-        }
+        if (segs[k].part) span.dataset.part = segs[k].part;
+        else span.dataset.para = String(segs[k].para);
+        span.dataset.start = String(segs[k].start ?? 0);
+        span.dataset.len = String(segs[k].str.length);
         j = k + 1;
         break;
       }

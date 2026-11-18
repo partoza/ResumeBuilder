@@ -32,6 +32,9 @@ const PAPER_W = 794; // A4 width in CSS px at 96 dpi
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
+/** Runs of a selection target: a paragraph ({ para }) or a letter line ({ part }). */
+const runsForTarget = (m, t) => (t.part ? m.parts?.[t.part] : m.paragraphs[t.para]) || [];
+
 // Stable React keys for repeatable entries.
 let nextId = 1;
 const withIds = (list) => list.map((it) => (it._id ? it : { ...it, _id: nextId++ }));
@@ -246,7 +249,7 @@ export default function App() {
         const ranges = selectionToRanges(previewRef.current);
         selRanges.current = ranges;
         if (!ranges) { setSelStyle(null); return; }
-        const pieces = ranges.flatMap(({ para, a, b }) => runsInRange(letterModel.paragraphs[para] || [], a, b));
+        const pieces = ranges.flatMap((t) => runsInRange(runsForTarget(letterModel, t), t.a, t.b));
         const all = (k) => pieces.length > 0 && pieces.every((r) => !!r[k]);
         const same = (k, dflt) => { const v = new Set(pieces.map((r) => r[k] || dflt)); return v.size === 1 ? [...v][0] : null; };
         setSelStyle({ bold: all('bold'), italic: all('italic'), font: same('font', letterModel.font.name), size: same('size', letterModel.size) });
@@ -264,7 +267,7 @@ export default function App() {
   const formatSelection = useCallback((kind, value) => {
     const ranges = selRanges.current;
     if (!ranges?.length) return false;
-    const pieces = ranges.flatMap(({ para, a, b }) => runsInRange(letterModel.paragraphs[para] || [], a, b));
+    const pieces = ranges.flatMap((t) => runsInRange(runsForTarget(letterModel, t), t.a, t.b));
     let v = value;
     if (kind === 'bold' || kind === 'italic') v = !(pieces.length && pieces.every((r) => !!r[kind]));
     if (kind === 'font') ensureCssFont(v);
@@ -277,16 +280,23 @@ export default function App() {
     const sources = letterModel.paragraphSources;
     setLetter((l) => {
       const content = { ...l.content };
+      const styles = { ...(l.styles || {}) };
       const parsed = {};
-      for (const { para, a, b } of ranges) {
-        const src = sources[para];
+      for (const t of ranges) {
+        if (t.part) {
+          // Date, recipient, Re:, salutation, close, name, title, enclosure: stored per part.
+          const runs = letterModel.parts?.[t.part];
+          if (runs) styles[t.part] = serializeRich([formatRange(runs, t.a, t.b, patch)]);
+          continue;
+        }
+        const src = sources[t.para];
         if (!src) continue;
         parsed[src.field] = parsed[src.field] || parseRich(content[src.field]);
         const runs = parsed[src.field][src.index];
-        if (runs) parsed[src.field][src.index] = formatRange(runs, a, b, patch);
+        if (runs) parsed[src.field][src.index] = formatRange(runs, t.a, t.b, patch);
       }
       for (const [field, paras] of Object.entries(parsed)) content[field] = serializeRich(paras);
-      return { ...l, content };
+      return { ...l, content, styles };
     });
     selRanges.current = null;
     setSelStyle(null);

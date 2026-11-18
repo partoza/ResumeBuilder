@@ -1,6 +1,7 @@
-// Map a text selection made on the preview (pdf.js text layer) back to the cover letter's
-// paragraphs: [{ para, a, b }] — paragraph index and character range [a, b) in its text.
-// Text-layer spans carry data-para / data-start / data-len (see tagSegments in PdfPages).
+// Map a text selection made on the preview (pdf.js text layer) back to the cover letter:
+// [{ para, a, b }] for paragraphs and [{ part, a, b }] for the other lines (date, recipient,
+// Re:, salutation, close, name, title, enclosure) — with the character range [a, b).
+// Text-layer spans carry data-para or data-part, plus data-start / data-len (see PdfPages).
 
 const offsetIn = (span, node, offset) => {
   const r = document.createRange();
@@ -15,7 +16,7 @@ export function selectionToRanges(root) {
   const range = sel.getRangeAt(0);
   if (!root.contains(range.commonAncestorContainer)) return null;
 
-  const byPara = new Map();
+  const byTarget = new Map(); // "p:3" / "t:date" → { para | part, a, b }
   for (const span of root.querySelectorAll('.textLayer span[data-start]')) {
     if (!range.intersectsNode(span)) continue;
     const len = span.textContent.length;
@@ -29,9 +30,15 @@ export function selectionToRanges(root) {
     const scale = segLen === len ? 1 : segLen / len;
     const start = Number(span.dataset.start) + Math.round(a * scale);
     const end = Number(span.dataset.start) + Math.round(b * scale);
-    const para = Number(span.dataset.para);
-    const cur = byPara.get(para);
-    byPara.set(para, cur ? [Math.min(cur[0], start), Math.max(cur[1], end)] : [start, end]);
+    const part = span.dataset.part;
+    const key = part ? `t:${part}` : `p:${span.dataset.para}`;
+    const cur = byTarget.get(key);
+    if (cur) {
+      cur.a = Math.min(cur.a, start);
+      cur.b = Math.max(cur.b, end);
+    } else {
+      byTarget.set(key, part ? { part, a: start, b: end } : { para: Number(span.dataset.para), a: start, b: end });
+    }
   }
-  return byPara.size ? [...byPara].map(([para, [a, b]]) => ({ para, a, b })) : null;
+  return byTarget.size ? [...byTarget.values()] : null;
 }

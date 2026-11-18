@@ -18,7 +18,9 @@ function letterFontUsage(m) {
   const add = (name, k) => (usage.get(name) || usage.set(name, new Set()).get(name)).add(k);
   add(m.font.name, 'r');
   if (m.nameBold) add(m.font.name, 'b');
-  for (const p of m.paragraphs) for (const r of p) add(r.font || m.font.name, styleKey(r.bold, r.italic));
+  for (const p of [...m.paragraphs, ...Object.values(m.parts || {})]) {
+    for (const r of p) add(r.font || m.font.name, styleKey(r.bold, r.italic));
+  }
   return usage;
 }
 export const LETTER_MAX_PAGES = 1;
@@ -448,18 +450,11 @@ async function createPdf(kind, m, { source } = {}) {
 
     doc.setTextColor(0, 0, 0);
 
-    /** A plain (single-style) line block — date, recipient, salutation, signature… */
-    const plainLines = (str, st = styleOf()) => {
-      use(st);
-      for (const l of doc.splitTextToSize(cleanFor(st)(str), lw)) {
-        newPageIfNeeded(LINE);
-        draw(l, lx, ly + baselineAt(st.size), st, { para: -1 });
-        ly += LINE;
-      }
-    };
-
-    /** A rich paragraph: word wrap across styles, aligned; records text positions. */
-    const richParagraph = (runs, paraIndex) => {
+    /**
+     * A rich block (paragraph or letter line): word wrap across styles, aligned; records
+     * each drawn string with `rec` ({ para } or { part }) plus its character offset.
+     */
+    const richParagraph = (runs, rec, align = m.align) => {
       // Words: groups of styled pieces with no whitespace between them.
       const words = [];
       let pendingSpace = null;
@@ -500,6 +495,7 @@ async function createPdf(kind, m, { source } = {}) {
         cur.words.push(word);
       });
       if (cur.words.length) lines.push(cur);
+      if (!lines.length) return;
 
       lines.forEach((line, li) => {
         const maxSize = Math.max(SIZE, ...line.words.flatMap((w) => w.pieces.map((p) => p.st.size)));
@@ -507,18 +503,18 @@ async function createPdf(kind, m, { source } = {}) {
         newPageIfNeeded(lineH);
         const y = ly + baselineAt(maxSize);
         const last = li === lines.length - 1;
-        const justify = m.align === 'justify' && !last && line.words.length > 1;
+        const justify = align === 'justify' && !last && line.words.length > 1;
         const extra = justify ? (lw - line.w) / (line.words.length - 1) : 0;
         let x = lx;
-        if (m.align === 'center') x = lx + (lw - line.w) / 2;
-        else if (m.align === 'right') x = lx + lw - line.w;
+        if (align === 'center') x = lx + (lw - line.w) / 2;
+        else if (align === 'right') x = lx + lw - line.w;
 
         // Draw: consecutive same-style pieces are merged into one string (exact source slice,
         // spaces included) except when justifying, where each word is placed on its own.
         const text = runs.map((r) => r.text).join('');
         let chunk = null;
         const flush = () => {
-          if (chunk) draw(text.slice(chunk.start, chunk.end), chunk.x, y, chunk.st, { para: paraIndex, start: chunk.start });
+          if (chunk) draw(text.slice(chunk.start, chunk.end), chunk.x, y, chunk.st, { ...rec, start: chunk.start });
           chunk = null;
         };
         line.words.forEach((word, wi) => {
@@ -541,20 +537,26 @@ async function createPdf(kind, m, { source } = {}) {
 
     const blank = (n = 1) => { ly += LINE * n; };
     let first = true;
-    const part = (strs) => {
+    // A letter part (date, recipient lines, Re:, …) — left-aligned, formattable from the preview.
+    const line = (key) => {
+      if (m.parts?.[key]) richParagraph(m.parts[key], { part: key }, 'left');
+    };
+    const part = (keys) => {
+      const present = keys.filter((k) => m.parts?.[k]);
+      if (!present.length) return;
       if (!first) blank();
       first = false;
-      strs.forEach((s) => plainLines(s));
+      present.forEach(line);
     };
 
-    if (m.date) part([m.date]);
-    if (m.recipient.length) part(m.recipient);
-    if (m.subject) part([m.subject]);
-    part([m.salutation]);
+    part(['date']);
+    part(m.recipientKeys || []);
+    part(['subject']);
+    part(['salutation']);
     m.paragraphs.forEach((runs, i) => {
       if (!first) blank();
       first = false;
-      richParagraph(runs, i);
+      richParagraph(runs, { para: i });
     });
     // Keep the close, signature space, name and title together on one page.
     if (ly + LINE * 7 > lbottom) {
@@ -562,11 +564,11 @@ async function createPdf(kind, m, { source } = {}) {
       ly = M;
       first = true;
     }
-    part([m.complimentary]);
+    part(['complimentary']);
     blank(3);
-    if (m.name) plainLines(m.name, { ...styleOf(), bold: m.nameBold });
-    if (m.signatureTitle) plainLines(m.signatureTitle);
-    if (m.enclosure) part([m.enclosure]);
+    line('name');
+    line('title');
+    part(['enclosure']);
   }
 
   /* ---------- summary ---------- */

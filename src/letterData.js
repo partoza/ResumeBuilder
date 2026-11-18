@@ -3,7 +3,7 @@
 // opening / body / closing paragraphs, complimentary close, signature.
 import { fullName, has } from './utils.js';
 import { LETTER_FONTS, letterFont } from './fonts.js';
-import { RUN_SIZES, parseRich, richPlain } from './rich.js';
+import { RUN_SIZES, paragraphText, parseRich, richPlain } from './rich.js';
 
 export { LETTER_FONTS, letterFont };
 
@@ -93,6 +93,7 @@ export function blankLetter() {
     content: { position: '', greeting: DEFAULT_GREETING, greetingOther: '', salutation: '', opening: '', body: '', closing: '' },
     signoff: { name: '', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: true },
     format: { ...DEFAULT_FORMAT },
+    styles: {},
   };
 }
 
@@ -119,6 +120,7 @@ export function sampleLetter() {
     },
     signoff: { name: 'Andrea Reyes Villanueva', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: true },
     format: { ...DEFAULT_FORMAT },
+    styles: {},
   };
 }
 
@@ -186,25 +188,73 @@ export function buildLetterModel(personal, letter) {
 
   const format = letter.format || DEFAULT_FORMAT;
   const font = letterFont(format.font);
+  const nameBold = s.nameBold !== false;
+
+  // Every other line of the letter (date, recipient, Re:, salutation, close, signature,
+  // enclosure) can be formatted from the preview too. Their text comes from other fields,
+  // so formatting is stored per part (letter.styles[key]) and reused while the text matches.
+  const partTexts = [
+    ['date', formatLongDate(r.date)],
+    ['recipient.name', recipientName],
+    ['recipient.title', (r.title || '').trim()],
+    ['recipient.company', (r.company || '').trim()],
+    ['recipient.address', (r.address || '').trim()],
+    ['subject', has(c.position) ? `Re: Application for ${c.position.trim()}` : ''],
+    ['salutation', has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName, c.greeting, c.greetingOther)],
+    ['complimentary', s.complimentary || 'Sincerely,'],
+    ['name', name],
+    ['title', s.showTitle ? (s.title || '').trim() : ''],
+    ['enclosure', s.enclosure ? 'Enclosure: Resume' : ''],
+  ];
+  const parts = {};
+  for (const [key, text] of partTexts) {
+    if (text) parts[key] = partRuns(letter.styles?.[key], text, key === 'name' && nameBold ? { bold: true } : {});
+  }
+
   const fontsUsed = new Set([font.name]);
-  for (const p of paragraphs) for (const run of p) if (run.font) fontsUsed.add(run.font);
+  for (const runs of [...paragraphs, ...Object.values(parts)]) for (const run of runs) if (run.font) fontsUsed.add(run.font);
   return {
     name,
     font,
     fontsUsed: [...fontsUsed],
     size: LETTER_SIZES.includes(Number(format.size)) ? Number(format.size) : DEFAULT_FORMAT.size,
     align: LETTER_ALIGNS.includes(format.align) ? format.align : 'left',
-    date: formatLongDate(r.date),
-    recipient: [recipientName, r.title, r.company, r.address].map((x) => (x || '').trim()).filter(Boolean),
-    subject: has(c.position) ? `Re: Application for ${c.position.trim()}` : '',
-    salutation: has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName, c.greeting, c.greetingOther),
+    parts,
+    date: parts.date ? partTexts[0][1] : '',
+    recipient: ['recipient.name', 'recipient.title', 'recipient.company', 'recipient.address'].filter((k) => parts[k]).map((k) => paragraphText(parts[k])),
+    recipientKeys: ['recipient.name', 'recipient.title', 'recipient.company', 'recipient.address'].filter((k) => parts[k]),
+    subject: parts.subject ? paragraphText(parts.subject) : '',
+    salutation: paragraphText(parts.salutation || []),
     paragraphs,
     paragraphSources,
-    complimentary: s.complimentary || 'Sincerely,',
-    nameBold: s.nameBold !== false,
-    signatureTitle: s.showTitle ? (s.title || '').trim() : '',
-    enclosure: s.enclosure ? 'Enclosure: Resume' : '',
+    complimentary: paragraphText(parts.complimentary || []),
+    nameBold,
+    signatureTitle: parts.title ? paragraphText(parts.title) : '',
+    enclosure: parts.enclosure ? paragraphText(parts.enclosure) : '',
   };
+}
+
+/** Letter lines (besides the paragraphs) that can be formatted from the preview. */
+export const LETTER_PART_KEYS = [
+  'date', 'recipient.name', 'recipient.title', 'recipient.company', 'recipient.address',
+  'subject', 'salutation', 'complimentary', 'name', 'title', 'enclosure',
+];
+
+/**
+ * Formatted runs for a letter part: the saved formatting if its text still matches; if the text
+ * changed, a uniform saved style (e.g. the whole line bold) is kept; otherwise plain `base`.
+ */
+function partRuns(stored, text, base) {
+  const saved = stored ? parseRich(stored)[0] : null;
+  if (saved?.length) {
+    if (paragraphText(saved) === text) return saved;
+    const uniform = saved.every((r) => !!r.bold === !!saved[0].bold && !!r.italic === !!saved[0].italic && r.size === saved[0].size && r.font === saved[0].font);
+    if (uniform) {
+      const { text: _unused, ...st } = saved[0];
+      return [{ ...st, text }];
+    }
+  }
+  return [{ ...base, text }];
 }
 
 /** Word count of the letter body, for the toolbar. Standard cover letters run ~250–400 words. */

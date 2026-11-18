@@ -1,7 +1,7 @@
 // Browser persistence (localStorage) so nothing is lost when the tab is hidden,
 // discarded by the browser (common on phones after switching apps), or reloaded.
 import { SECTIONS, blankState } from './data.js';
-import { DEFAULT_FORMAT, blankLetter, letterHasContent } from './letterData.js';
+import { DEFAULT_FORMAT, LETTER_PART_KEYS, blankLetter, letterHasContent } from './letterData.js';
 import { sectionHasContent } from './utils.js';
 
 const KEYS = {
@@ -102,7 +102,14 @@ export function loadLetter() {
 export function hydrateLetter(saved) {
   const base = blankLetter();
   if (!isObj(saved)) return base;
-  for (const k of Object.keys(base)) base[k] = pick(base[k], saved[k]);
+  for (const k of Object.keys(base)) if (k !== 'styles') base[k] = pick(base[k], saved[k]);
+  // Per-part formatting from the preview: known part names with (sanitized-on-read) rich text only.
+  if (isObj(saved.styles)) {
+    for (const key of LETTER_PART_KEYS) {
+      const v = saved.styles[key];
+      if (typeof v === 'string' && v.length <= 20000) base.styles[key] = v;
+    }
+  }
   return base;
 }
 
