@@ -727,7 +727,7 @@ export function parseLetter(lines) {
     const greeting = GREETINGS.find((g) => g !== 'Other' && bare(sal) === bare(autoSalutation(recipient.name, g)));
     // "<own greeting>, <recipient>," (e.g. "Good morning, Ms. Lim,") → Other + that greeting.
     const body = sal.replace(/[,:]\s*$/, '').trim();
-    const addressees = [autoSalutation(recipient.name, 'Dear').replace(/^Dear\s+/, '').replace(/,$/, ''), 'Hiring Manager'];
+    const addressees = [autoSalutation(recipient.name, 'Dear').replace(/^Dear\s+/, '').replace(/[,:]$/, ''), 'Hiring Manager'];
     const addr = !greeting && addressees.find((a) => body.toLowerCase().endsWith(a.toLowerCase()));
     const prefix = addr ? body.slice(0, body.length - addr.length).replace(/[\s,]+$/, '').trim() : '';
     if (greeting) content.greeting = greeting;

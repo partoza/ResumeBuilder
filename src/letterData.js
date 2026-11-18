@@ -42,12 +42,12 @@ export const LETTER_SECTIONS = [
       { key: 'greeting', label: 'Greeting', type: 'select', options: GREETINGS },
       {
         key: 'greetingOther', label: 'Your greeting', placeholder: 'e.g. Good morning, Hi, Magandang araw',
-        hint: 'Followed by the recipient’s name, e.g. “Good morning, Ms. Santos,”.',
+        hint: 'Followed by the recipient’s name, e.g. “Good morning, Ms. Santos:”.',
         showWhen: (c) => c.greeting === 'Other',
       },
       {
-        key: 'salutation', label: 'Custom salutation (optional)', placeholder: 'e.g. Dear Search Committee,',
-        hint: 'Leave blank to use the greeting with the recipient’s name, e.g. “Dear Ms. Santos,” or “Dear Hiring Manager,”.',
+        key: 'salutation', label: 'Custom salutation (optional)', placeholder: 'e.g. Dear Search Committee:',
+        hint: 'Leave blank to use the greeting with the recipient’s name, e.g. “Dear Ms. Santos:” or “Dear Hiring Manager:”.',
       },
       {
         key: 'opening', label: 'Opening paragraph', type: 'rich', full: true,
@@ -143,19 +143,19 @@ function addressee(recipientName) {
 
 /**
  * Salutation from a greeting and the recipient's name:
- * Dear → "Dear Ms. Lim,"   Good day → "Good day, Ms. Lim,"   Greetings → "Greetings, Ms. Lim,"
- * Hello → "Hello Ms. Lim,"   To Whom It May Concern → "To Whom It May Concern,"
- * Other + "Good morning" → "Good morning, Ms. Lim,"
+ * Dear → "Dear Ms. Lim:"   Good day → "Good day, Ms. Lim:"   Greetings → "Greetings, Ms. Lim:"
+ * Hello → "Hello Ms. Lim:"   To Whom It May Concern → "To Whom It May Concern:"
+ * Other + "Good morning" → "Good morning, Ms. Lim:"  (business-letter colon)
  */
 export function autoSalutation(recipientName, greeting = DEFAULT_GREETING, other = '') {
   if (greeting === 'Other') {
     const custom = String(other || '').trim().replace(/[,:]+$/, '');
-    if (custom) return `${custom}, ${addressee(recipientName)},`;
+    if (custom) return `${custom}, ${addressee(recipientName)}:`;
   }
   const g = GREETINGS.includes(greeting) && greeting !== 'Other' ? greeting : DEFAULT_GREETING;
-  if (g === 'To Whom It May Concern') return `${g},`;
+  if (g === 'To Whom It May Concern') return `${g}:`;
   const sep = g === 'Good day' || g === 'Greetings' ? ', ' : ' ';
-  return `${g}${sep}${addressee(recipientName)},`;
+  return `${g}${sep}${addressee(recipientName)}:`;
 }
 
 function formatLongDate(iso) {
