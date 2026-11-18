@@ -8,6 +8,7 @@
 import affUrl from './assets/dictionary/en_US.aff?url';
 import dicUrl from './assets/dictionary/en_US.dic?url';
 import { has } from './utils.js';
+import { richPlain } from './rich.js';
 
 const DICT_KEY = 'resume-builder:dictionary:v1';
 
@@ -102,7 +103,7 @@ export function documentText(kind, data, letter) {
     const r = letter.recipient;
     const c = letter.content;
     return {
-      prose: [c.position, c.salutation, c.opening, c.body, c.closing, letter.signoff.complimentary],
+      prose: [c.position, c.salutation, richPlain(c.opening), richPlain(c.body), richPlain(c.closing), letter.signoff.complimentary],
       // A custom greeting may be in another language ("Magandang araw") — never flag it.
       names: [c.greetingOther, r.name, r.title, r.company, r.address, letter.signoff.name, data.personal.firstName, data.personal.middleName, data.personal.lastName],
     };

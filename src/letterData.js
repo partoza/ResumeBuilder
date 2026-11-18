@@ -2,6 +2,10 @@
 // Standard block-format business letter: date, inside address, Re: line, salutation,
 // opening / body / closing paragraphs, complimentary close, signature.
 import { fullName, has } from './utils.js';
+import { LETTER_FONTS, letterFont } from './fonts.js';
+import { RUN_SIZES, parseRich, richPlain } from './rich.js';
+
+export { LETTER_FONTS, letterFont };
 
 export const COMPLIMENTARY_CLOSES = ['Sincerely,', 'Respectfully yours,', 'Very truly yours,', 'Best regards,'];
 
@@ -9,22 +13,10 @@ export const COMPLIMENTARY_CLOSES = ['Sincerely,', 'Respectfully yours,', 'Very 
 export const GREETINGS = ['Dear', 'Good day', 'Greetings', 'Hello', 'To Whom It May Concern', 'Other'];
 export const DEFAULT_GREETING = 'Dear';
 
-/**
- * Font choices for the letter, like a word processor's font menu.
- * `pdf` is the jsPDF font: the three standard PDF fonts (Times, Helvetica = Arial
- * metrics, Courier) or the embedded Inter. ascent/descent are in em, used to place
- * the baseline inside a 1.15 line box exactly like the browser does.
- */
-export const LETTER_FONTS = [
-  { name: 'Times New Roman', css: '"Times New Roman", Times, "Liberation Serif", serif', pdf: 'times', ascent: 0.891, descent: 0.216 },
-  { name: 'Arial', css: 'Arial, Helvetica, "Liberation Sans", sans-serif', pdf: 'helvetica', ascent: 0.905, descent: 0.212 },
-  { name: 'Courier New', css: '"Courier New", Courier, "Liberation Mono", monospace', pdf: 'courier', ascent: 0.833, descent: 0.3 },
-  { name: 'Inter', css: '"Inter", Arial, sans-serif', pdf: 'I400', ascent: 0.969, descent: 0.242 },
-];
-export const LETTER_SIZES = [10, 11, 12];
+/** Base text sizes for the whole letter (selected text can use any size in RUN_SIZES). */
+export const LETTER_SIZES = RUN_SIZES;
 export const LETTER_ALIGNS = ['left', 'center', 'right', 'justify'];
 export const DEFAULT_FORMAT = { font: 'Times New Roman', size: 12, align: 'left' };
-export const letterFont = (name) => LETTER_FONTS.find((f) => f.name === name) || LETTER_FONTS[0];
 
 export const LETTER_SECTIONS = [
   {
@@ -58,17 +50,17 @@ export const LETTER_SECTIONS = [
         hint: 'Leave blank to use the greeting with the recipient’s name, e.g. “Dear Ms. Santos,” or “Dear Hiring Manager,”.',
       },
       {
-        key: 'opening', label: 'Opening paragraph', type: 'textarea', full: true,
+        key: 'opening', label: 'Opening paragraph', type: 'rich', full: true,
         hint: 'Name the position, where you found it, and one line on why you’re a strong fit.',
         placeholder: 'I am writing to apply for the Junior Web Developer position advertised on JobStreet…',
       },
       {
-        key: 'body', label: 'Body', type: 'textarea', full: true,
+        key: 'body', label: 'Body', type: 'rich', full: true,
         hint: 'Connect your skills and results to what the employer needs. Leave a blank line to start a new paragraph.',
         placeholder: 'During my internship at …, I built … which resulted in …',
       },
       {
-        key: 'closing', label: 'Closing paragraph', type: 'textarea', full: true,
+        key: 'closing', label: 'Closing paragraph', type: 'rich', full: true,
         hint: 'Restate your interest, ask for an interview, and thank the reader.',
         placeholder: 'I would welcome the opportunity to discuss how I can contribute to your team…',
       },
@@ -172,7 +164,7 @@ function formatLongDate(iso) {
 
 export function letterHasContent(letter) {
   const { recipient: r, content: c, signoff: s } = letter;
-  return [r.name, r.title, r.company, r.address, c.position, c.salutation, c.opening, c.body, c.closing, s.name].some(has);
+  return [r.name, r.title, r.company, r.address, c.position, c.salutation, richPlain(c.opening), richPlain(c.body), richPlain(c.closing), s.name].some(has);
 }
 
 /** Normalized cover letter content shared by the preview and the PDF. */
@@ -181,18 +173,25 @@ export function buildLetterModel(personal, letter) {
   const name = has(s.name) ? s.name.trim() : fullName(personal);
   const recipientName = (r.name || '').trim();
 
-  const paragraphs = [
-    c.opening,
-    ...String(c.body || '').split(/\n\s*\n/),
-    c.closing,
-  ]
-    .map((x) => String(x || '').trim().replace(/\s*\n\s*/g, ' '))
-    .filter(Boolean);
+  // Paragraphs of formatted runs: [[{ text, bold?, italic?, size?, font? }, …], …], and where each
+  // one comes from ({ field, index }) so a selection in the preview can be written back.
+  const paragraphs = [];
+  const paragraphSources = [];
+  for (const field of ['opening', 'body', 'closing']) {
+    parseRich(c[field]).forEach((p, index) => {
+      paragraphs.push(p);
+      paragraphSources.push({ field, index });
+    });
+  }
 
   const format = letter.format || DEFAULT_FORMAT;
+  const font = letterFont(format.font);
+  const fontsUsed = new Set([font.name]);
+  for (const p of paragraphs) for (const run of p) if (run.font) fontsUsed.add(run.font);
   return {
     name,
-    font: letterFont(format.font),
+    font,
+    fontsUsed: [...fontsUsed],
     size: LETTER_SIZES.includes(Number(format.size)) ? Number(format.size) : DEFAULT_FORMAT.size,
     align: LETTER_ALIGNS.includes(format.align) ? format.align : 'left',
     date: formatLongDate(r.date),
@@ -200,6 +199,7 @@ export function buildLetterModel(personal, letter) {
     subject: has(c.position) ? `Re: Application for ${c.position.trim()}` : '',
     salutation: has(c.salutation) ? c.salutation.trim() : autoSalutation(recipientName, c.greeting, c.greetingOther),
     paragraphs,
+    paragraphSources,
     complimentary: s.complimentary || 'Sincerely,',
     nameBold: s.nameBold !== false,
     signatureTitle: s.showTitle ? (s.title || '').trim() : '',
@@ -209,4 +209,4 @@ export function buildLetterModel(personal, letter) {
 
 /** Word count of the letter body, for the toolbar. Standard cover letters run ~250–400 words. */
 export const letterWordCount = (m) =>
-  m.paragraphs.join(' ').split(/\s+/).filter(Boolean).length;
+  m.paragraphs.map((p) => p.map((r) => r.text).join('')).join(' ').split(/\s+/).filter(Boolean).length;

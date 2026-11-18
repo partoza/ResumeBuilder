@@ -9,7 +9,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@expo-google-fonts/eb-garamond": "0.4.3",
+    "@expo-google-fonts/gelasio": "0.4.1",
     "@expo-google-fonts/inter": "0.4.2",
+    "@expo-google-fonts/lato": "0.4.1",
+    "@expo-google-fonts/libre-baskerville": "0.4.3",
+    "@expo-google-fonts/lora": "0.4.2",
+    "@expo-google-fonts/merriweather": "0.4.2",
+    "@expo-google-fonts/montserrat": "0.4.2",
+    "@expo-google-fonts/open-sans": "0.4.2",
+    "@expo-google-fonts/poppins": "0.4.1",
+    "@expo-google-fonts/pt-serif": "0.4.1",
+    "@expo-google-fonts/roboto": "0.4.3",
     "@fontsource/inter": "5.1.0",
     "jspdf": "2.5.2",
     "nspell": "2.1.5",

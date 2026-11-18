@@ -1,4 +1,5 @@
 import Select from './Select.jsx';
+import RichText from './RichText.jsx';
 import { splitItems, splitList } from '../utils.js';
 
 // Live count of what the text will become on the resume.
@@ -52,7 +53,9 @@ export default function Field({ field: f, id, value, onChange, disabled }) {
   ) : null;
 
   let control;
-  if (f.type === 'textarea') {
+  if (f.type === 'rich') {
+    control = <RichText id={id} value={value} onChange={onChange} placeholder={f.placeholder} label={f.label} />;
+  } else if (f.type === 'textarea') {
     control = (
       <textarea
         className={`textarea${feedback?.level === 'warn' ? ' is-warn' : ''}`}

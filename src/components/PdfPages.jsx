@@ -4,6 +4,31 @@ import { loadPdfjs } from '../pdfjs.js';
 import { suggestionsFor, wordOf } from '../spellcheck.js';
 
 const A4_RATIO = 297 / 210;
+
+/**
+ * Tag each text-layer span with where its text came from (paragraph index and character
+ * offset), using the segments the PDF generator recorded in drawing order. pdf.js creates
+ * one span per drawn string, so they're matched in order (skipping whitespace-only spans).
+ */
+function tagSegments(textLayer, segs) {
+  if (!segs.length) return;
+  let j = 0;
+  for (const span of textLayer.querySelectorAll('span:not(.markedContent)')) {
+    const t = span.textContent.trim();
+    if (!t) continue;
+    for (let k = j; k < Math.min(segs.length, j + 6); k++) {
+      if (segs[k].str.trim() === t) {
+        span.dataset.para = String(segs[k].para);
+        if (segs[k].para >= 0) {
+          span.dataset.start = String(segs[k].start);
+          span.dataset.len = String(segs[k].str.length);
+        }
+        j = k + 1;
+        break;
+      }
+    }
+  }
+}
 const WORD_RE = /[A-Za-z][A-Za-z'’]*/g;
 
 /**
@@ -67,6 +92,7 @@ export default function PdfPages({ build, version, width, maxPages, onPageCount,
           try {
             const tl = new lib.TextLayer({ textContentSource: await page.getTextContent(), container: textLayer, viewport: cssViewport });
             await tl.render();
+            tagSegments(textLayer, (doc.__segments || []).filter((s) => s.page === n));
           } catch (err) {
             console.warn('Text layer failed', err);
           }

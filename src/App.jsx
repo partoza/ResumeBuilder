@@ -7,6 +7,9 @@ import Select from './components/Select.jsx';
 import PdfPages from './components/PdfPages.jsx';
 import { documentText, findMisspellings, ignoreWord, preloadSpellcheck, replaceWordIn } from './spellcheck.js';
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Download, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
+import { ensureCssFont, isStandardFont } from './fonts.js';
+import { formatRange, mapRichText, parseRich, runsInRange, serializeRich } from './rich.js';
+import { selectionToRanges } from './previewSelection.js';
 
 const ALIGN_BUTTONS = [
   ['left', 'Align left', AlignLeft],
@@ -207,7 +210,8 @@ export default function App() {
   const fixWord = useCallback((word, replacement) => {
     const fix = (t) => replaceWordIn(t, word, replacement);
     if (docTab === 'letter') {
-      setLetter((l) => ({ ...l, content: Object.fromEntries(Object.entries(l.content).map(([k, v]) => [k, k === 'greeting' ? v : fix(v)])) }));
+      const RICH = ['opening', 'body', 'closing'];
+      setLetter((l) => ({ ...l, content: Object.fromEntries(Object.entries(l.content).map(([k, v]) => [k, k === 'greeting' ? v : RICH.includes(k) ? mapRichText(v, fix) : fix(v)])) }));
     } else {
       setData((d) => ({
         ...d,
@@ -227,6 +231,87 @@ export default function App() {
     setDictVersion((v) => v + 1);
     notify(`“${word}” added to your dictionary`);
   }, [notify]);
+
+  /* ---- select text in the preview and format it (cover letter) ---- */
+  const previewRef = useRef(null);
+  const selRanges = useRef(null); // last selection in the preview's paragraphs: [{ para, a, b }]
+  const [selStyle, setSelStyle] = useState(null); // { bold, italic, font, size } of that selection
+
+  useEffect(() => {
+    if (!isLetter) { selRanges.current = null; setSelStyle(null); return undefined; }
+    const onSel = () => {
+      const sel = window.getSelection();
+      const inPreview = sel && sel.rangeCount && previewRef.current?.contains(sel.getRangeAt(0).commonAncestorContainer);
+      if (inPreview) {
+        const ranges = selectionToRanges(previewRef.current);
+        selRanges.current = ranges;
+        if (!ranges) { setSelStyle(null); return; }
+        const pieces = ranges.flatMap(({ para, a, b }) => runsInRange(letterModel.paragraphs[para] || [], a, b));
+        const all = (k) => pieces.length > 0 && pieces.every((r) => !!r[k]);
+        const same = (k, dflt) => { const v = new Set(pieces.map((r) => r[k] || dflt)); return v.size === 1 ? [...v][0] : null; };
+        setSelStyle({ bold: all('bold'), italic: all('italic'), font: same('font', letterModel.font.name), size: same('size', letterModel.size) });
+      } else if (sel && !sel.isCollapsed) {
+        // A new selection somewhere else (e.g. the form) replaces the preview selection.
+        selRanges.current = null;
+        setSelStyle(null);
+      }
+    };
+    document.addEventListener('selectionchange', onSel);
+    return () => document.removeEventListener('selectionchange', onSel);
+  }, [isLetter, letterModel]);
+
+  /** Apply bold / italic (toggle) or a font / size to the text selected in the preview. */
+  const formatSelection = useCallback((kind, value) => {
+    const ranges = selRanges.current;
+    if (!ranges?.length) return false;
+    const pieces = ranges.flatMap(({ para, a, b }) => runsInRange(letterModel.paragraphs[para] || [], a, b));
+    let v = value;
+    if (kind === 'bold' || kind === 'italic') v = !(pieces.length && pieces.every((r) => !!r[kind]));
+    if (kind === 'font') ensureCssFont(v);
+    const patch = (r) => {
+      const out = { ...r };
+      if (v === false || v === null || v === undefined) delete out[kind];
+      else out[kind] = v;
+      return out;
+    };
+    const sources = letterModel.paragraphSources;
+    setLetter((l) => {
+      const content = { ...l.content };
+      const parsed = {};
+      for (const { para, a, b } of ranges) {
+        const src = sources[para];
+        if (!src) continue;
+        parsed[src.field] = parsed[src.field] || parseRich(content[src.field]);
+        const runs = parsed[src.field][src.index];
+        if (runs) parsed[src.field][src.index] = formatRange(runs, a, b, patch);
+      }
+      for (const [field, paras] of Object.entries(parsed)) content[field] = serializeRich(paras);
+      return { ...l, content };
+    });
+    selRanges.current = null;
+    setSelStyle(null);
+    window.getSelection()?.removeAllRanges();
+    return true;
+  }, [letterModel]);
+
+  const toggleStyle = (kind) => {
+    if (!formatSelection(kind)) notify('Select some text in the letter preview first, then click B or I.');
+  };
+
+  // Ctrl/Cmd+B and +I while text is selected in the preview.
+  useEffect(() => {
+    if (!isLetter) return undefined;
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if ((k === 'b' || k === 'i') && selRanges.current) {
+        e.preventDefault();
+        formatSelection(k === 'b' ? 'bold' : 'italic');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isLetter, formatSelection]);
   const overLimit = pages > docInfo.max;
 
   function switchDoc(next) {
@@ -639,19 +724,50 @@ export default function App() {
                 <Select
                   size="sm"
                   className="tool-font"
-                  ariaLabel="Font"
-                  value={letterModel.font.name}
-                  options={LETTER_FONTS.map((f) => ({ value: f.name, label: f.name, style: { fontFamily: f.css } }))}
-                  onChange={(v) => updateLetter(['format', 'font'], v)}
+                  ariaLabel={selStyle ? 'Font of selected text' : 'Font'}
+                  value={selStyle ? selStyle.font || '' : letterModel.font.name}
+                  placeholder="Font"
+                  options={LETTER_FONTS.map((f) => ({ value: f.name, label: f.label || f.name, style: { fontFamily: f.css } }))}
+                  onChange={(v) => {
+                    ensureCssFont(v);
+                    if (!formatSelection('font', v)) updateLetter(['format', 'font'], v);
+                  }}
                 />
                 <Select
                   size="sm"
                   className="tool-size"
-                  ariaLabel="Font size"
-                  value={letterModel.size}
+                  ariaLabel={selStyle ? 'Size of selected text' : 'Font size'}
+                  value={selStyle ? selStyle.size || '' : letterModel.size}
+                  placeholder="–"
                   options={LETTER_SIZES.map((n) => ({ value: n, label: String(n) }))}
-                  onChange={(v) => updateLetter(['format', 'size'], Number(v))}
+                  onChange={(v) => {
+                    if (!formatSelection('size', Number(v))) updateLetter(['format', 'size'], Number(v));
+                  }}
                 />
+                <div className="align-group" role="group" aria-label="Text style">
+                  <button
+                    type="button"
+                    className={`align-btn style-btn${selStyle?.bold ? ' is-active' : ''}`}
+                    aria-pressed={!!selStyle?.bold}
+                    aria-label="Bold"
+                    title="Bold (Ctrl+B) — select text in the preview first"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => toggleStyle('bold')}
+                  >
+                    <b>B</b>
+                  </button>
+                  <button
+                    type="button"
+                    className={`align-btn style-btn${selStyle?.italic ? ' is-active' : ''}`}
+                    aria-pressed={!!selStyle?.italic}
+                    aria-label="Italic"
+                    title="Italic (Ctrl+I) — select text in the preview first"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => toggleStyle('italic')}
+                  >
+                    <i>I</i>
+                  </button>
+                </div>
                 <div className="align-group" role="radiogroup" aria-label="Paragraph alignment">
                   {ALIGN_BUTTONS.map(([value, label, Icon]) => (
                     <button
@@ -694,7 +810,7 @@ export default function App() {
             </div>
             </div>
           </div>
-          <div className="preview-scroll" ref={scrollRef}>
+          <div className="preview-scroll" ref={(el) => { scrollRef.current = el; previewRef.current = el; }}>
             {!showPdfPages && (
               <div className="paper-wrap" style={{ width: PAPER_W * scale, height: paperH * scale }}>
                 {isLetter ? (
@@ -713,7 +829,7 @@ export default function App() {
                 maxPages={docInfo.max}
                 onPageCount={setPages}
                 onReady={(ok) => setPdfView({ tab: docTab, ok })}
-                embeddedFonts={!isLetter || letterModel.font.pdf === 'I400'}
+                embeddedFonts={!isLetter || letterModel.fontsUsed.every((n) => !isStandardFont(n))}
                 misspelled={misspelled}
                 onReplace={fixWord}
                 onIgnore={ignoreSpelling}

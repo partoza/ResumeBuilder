@@ -8,8 +8,19 @@ import inter500 from '@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf?url
 import inter600 from '@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf?url';
 import inter700 from '@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf?url';
 import { HEADINGS, SUBHEADINGS } from './model.js';
+import { isStandardFont, pdfFontFor, registerPdfFonts, styleKey } from './fonts.js';
 
 export const MAX_PAGES = 2;
+
+/** Fonts and styles a cover letter uses: Map(fontName → Set(style key)). */
+function letterFontUsage(m) {
+  const usage = new Map();
+  const add = (name, k) => (usage.get(name) || usage.set(name, new Set()).get(name)).add(k);
+  add(m.font.name, 'r');
+  if (m.nameBold) add(m.font.name, 'b');
+  for (const p of m.paragraphs) for (const r of p) add(r.font || m.font.name, styleKey(r.bold, r.italic));
+  return usage;
+}
 export const LETTER_MAX_PAGES = 1;
 const DOC_LABEL = { resume: 'Resume', letter: 'Cover Letter' };
 
@@ -165,8 +176,9 @@ async function createPdf(kind, m, { source } = {}) {
   }
   const plain = (s) => String(s ?? '');
   const T = fonts ? plain : pdfText;
-  // Only embed Inter when the document actually uses it (keeps letters in standard fonts small).
-  const needsInter = kind === 'resume' || m.font?.pdf === 'I400';
+  // The resume uses Inter; a cover letter registers only the fonts and styles it actually uses.
+  const needsInter = kind === 'resume';
+  const letterFaces = kind === 'letter' ? await registerPdfFonts(doc, letterFontUsage(m)) : null;
   if (fonts && needsInter) {
     for (const [name, data] of fonts) {
       doc.addFileToVFS(`${name}.ttf`, data);
@@ -381,73 +393,169 @@ async function createPdf(kind, m, { source } = {}) {
    * 1in margins, chosen font and size (default Times 12pt), black, single-spaced (1.15),
    * one blank line between parts and three blank lines for the signature. Text is
    * real PDF text in every font, so it stays extractable for ATS.
+   *
+   * Paragraphs are rich: each run can have its own bold / italic / size / font. Every
+   * piece of text drawn is recorded in doc.__segments (in drawing order) with the
+   * paragraph and character offset it came from, so a selection made on the preview's
+   * text layer can be mapped back to the letter's text.
    */
   function drawLetter() {
     const SIZE = m.size;
-    const LINE = SIZE * 1.15 * PT; // single spacing
+    const LINE = SIZE * 1.15 * PT; // single spacing at the base size
     const M = 25.4; // 1 inch
     const lx = M;
     const lw = PAGE.w - 2 * M;
     const lbottom = PAGE.h - M;
-    // Embedded Inter needs the font files; otherwise fall back to Arial-metric Helvetica.
-    const f = m.font.pdf === 'I400' && !fonts ? { pdf: 'helvetica', ascent: 0.905, descent: 0.212 } : m.font;
-    const builtIn = f.pdf !== 'I400';
-    const clean = builtIn ? pdfText : plain;
-    // Baseline position inside the 1.15 line box, matching the browser.
-    const base = ((1.15 - (f.ascent + f.descent)) / 2 + f.ascent) * SIZE * PT;
+    const base = m.font; // default font entry (name, std?, ascent, descent)
+    const segments = [];
+    doc.__segments = segments;
     let ly = M;
 
-    // Regular or bold in the chosen font (embedded Inter uses its Bold face).
-    const setStyle = (bold = false) => {
-      if (builtIn) doc.setFont(f.pdf, bold ? 'bold' : 'normal');
-      else doc.setFont(bold ? 'I700' : 'I400', 'normal');
+    const styleOf = (r = {}) => ({
+      font: r.font || base.name,
+      bold: !!r.bold,
+      italic: !!r.italic,
+      size: r.size || SIZE,
+    });
+    const use = (st) => {
+      const [name, style] = pdfFontFor(st.font, st.bold, st.italic, letterFaces);
+      doc.setFont(name, style);
+      doc.setFontSize(st.size);
     };
-    setStyle(false);
-    doc.setFontSize(SIZE);
-    doc.setTextColor(0, 0, 0);
-
-    /** One line of text, aligned; "justify" spreads words to both margins (not on a paragraph's last line). */
-    const line = (str, align = 'left', last = true) => {
-      if (ly + LINE > lbottom + 0.01) {
+    // Standard fonts (and any embedded face that failed to load) only cover Latin-1.
+    const cleanFor = (st) =>
+      isStandardFont(st.font) || !letterFaces.has(`${st.font}|${styleKey(st.bold, st.italic)}`) ? pdfText : plain;
+    const width = (str, st) => {
+      use(st);
+      return doc.getTextWidth(cleanFor(st)(str));
+    };
+    const sameSt = (a, b) => a.font === b.font && a.bold === b.bold && a.italic === b.italic && a.size === b.size;
+    // Baseline inside a 1.15 line box at a given size, matching the browser.
+    const baselineAt = (size) => ((1.15 - (base.ascent + base.descent)) / 2 + base.ascent) * size * PT;
+    const newPageIfNeeded = (h) => {
+      if (ly + h > lbottom + 0.01) {
         doc.addPage();
         ly = M;
       }
-      const y = ly + base;
-      const words = str.split(' ').filter(Boolean);
-      if (align === 'justify' && !last && words.length > 1) {
-        const widths = words.map((w) => doc.getTextWidth(w));
-        const gap = (lw - widths.reduce((a, b) => a + b, 0)) / (words.length - 1);
+    };
+    const draw = (str, x, y, st, rec, opts = {}) => {
+      use(st);
+      const out = cleanFor(st)(str);
+      if (!out) return;
+      doc.text(out, x, y, { baseline: 'alphabetic', ...opts });
+      segments.push({ page: doc.getNumberOfPages(), str: out, ...rec });
+    };
+
+    doc.setTextColor(0, 0, 0);
+
+    /** A plain (single-style) line block — date, recipient, salutation, signature… */
+    const plainLines = (str, st = styleOf()) => {
+      use(st);
+      for (const l of doc.splitTextToSize(cleanFor(st)(str), lw)) {
+        newPageIfNeeded(LINE);
+        draw(l, lx, ly + baselineAt(st.size), st, { para: -1 });
+        ly += LINE;
+      }
+    };
+
+    /** A rich paragraph: word wrap across styles, aligned; records text positions. */
+    const richParagraph = (runs, paraIndex) => {
+      // Words: groups of styled pieces with no whitespace between them.
+      const words = [];
+      let pendingSpace = null;
+      let offset = 0;
+      let forcedBreaks = new Set();
+      for (const run of runs) {
+        const st = styleOf(run);
+        for (const m2 of run.text.matchAll(/\n|[^\S\n]+|[^\s]+/g)) {
+          const tok = m2[0];
+          const start = offset + m2.index;
+          if (tok === '\n') {
+            forcedBreaks.add(words.length);
+            pendingSpace = null;
+          } else if (/^\s+$/.test(tok)) {
+            pendingSpace = { st, text: tok };
+          } else {
+            const piece = { text: tok, st, start, w: width(tok, st) };
+            const last = words[words.length - 1];
+            if (last && !pendingSpace && !forcedBreaks.has(words.length)) last.pieces.push(piece);
+            else words.push({ pieces: [piece], space: pendingSpace ? width(pendingSpace.text.replace(/\s+/g, ' '), pendingSpace.st) : 0 });
+            pendingSpace = null;
+          }
+        }
+        offset += run.text.length;
+      }
+
+      // Lines.
+      const lines = [];
+      let cur = { words: [], w: 0 };
+      words.forEach((word, i) => {
+        const ww = word.pieces.reduce((s, p) => s + p.w, 0);
+        const sp = cur.words.length ? word.space : 0;
+        if (cur.words.length && (forcedBreaks.has(i) || cur.w + sp + ww > lw)) {
+          lines.push(cur);
+          cur = { words: [], w: 0 };
+        }
+        cur.w += (cur.words.length ? word.space : 0) + ww;
+        cur.words.push(word);
+      });
+      if (cur.words.length) lines.push(cur);
+
+      lines.forEach((line, li) => {
+        const maxSize = Math.max(SIZE, ...line.words.flatMap((w) => w.pieces.map((p) => p.st.size)));
+        const lineH = maxSize * 1.15 * PT;
+        newPageIfNeeded(lineH);
+        const y = ly + baselineAt(maxSize);
+        const last = li === lines.length - 1;
+        const justify = m.align === 'justify' && !last && line.words.length > 1;
+        const extra = justify ? (lw - line.w) / (line.words.length - 1) : 0;
         let x = lx;
-        words.forEach((w, i) => {
-          doc.text(w, x, y, { baseline: 'alphabetic' });
-          x += widths[i] + gap;
+        if (m.align === 'center') x = lx + (lw - line.w) / 2;
+        else if (m.align === 'right') x = lx + lw - line.w;
+
+        // Draw: consecutive same-style pieces are merged into one string (exact source slice,
+        // spaces included) except when justifying, where each word is placed on its own.
+        const text = runs.map((r) => r.text).join('');
+        let chunk = null;
+        const flush = () => {
+          if (chunk) draw(text.slice(chunk.start, chunk.end), chunk.x, y, chunk.st, { para: paraIndex, start: chunk.start });
+          chunk = null;
+        };
+        line.words.forEach((word, wi) => {
+          if (wi > 0) x += word.space + extra;
+          word.pieces.forEach((p, pi) => {
+            const joinable = chunk && !justify && sameSt(chunk.st, p.st) && (pi > 0 || chunk.spaceStyleOk(word));
+            if (joinable) chunk.end = p.start + p.text.length;
+            else {
+              flush();
+              chunk = { st: p.st, x, start: p.start, end: p.start + p.text.length, spaceStyleOk: (w) => sameSt(p.st, w.pieces[0].st) };
+            }
+            x += p.w;
+          });
+          if (justify) flush();
         });
-      } else if (align === 'center') doc.text(str, lx + lw / 2, y, { baseline: 'alphabetic', align: 'center' });
-      else if (align === 'right') doc.text(str, lx + lw, y, { baseline: 'alphabetic', align: 'right' });
-      else doc.text(str, lx, y, { baseline: 'alphabetic' });
-      ly += LINE;
+        flush();
+        ly += lineH;
+      });
     };
-    const lines = (str, align = 'left') => {
-      const ls = doc.splitTextToSize(clean(str), lw);
-      ls.forEach((l, i) => line(l, align, i === ls.length - 1));
-    };
+
     const blank = (n = 1) => { ly += LINE * n; };
     let first = true;
     const part = (strs) => {
       if (!first) blank();
       first = false;
-      strs.forEach(lines);
+      strs.forEach((s) => plainLines(s));
     };
 
     if (m.date) part([m.date]);
     if (m.recipient.length) part(m.recipient);
     if (m.subject) part([m.subject]);
     part([m.salutation]);
-    for (const para of m.paragraphs) {
+    m.paragraphs.forEach((runs, i) => {
       if (!first) blank();
       first = false;
-      lines(para, m.align);
-    }
+      richParagraph(runs, i);
+    });
     // Keep the close, signature space, name and title together on one page.
     if (ly + LINE * 7 > lbottom) {
       doc.addPage();
@@ -456,12 +564,8 @@ async function createPdf(kind, m, { source } = {}) {
     }
     part([m.complimentary]);
     blank(3);
-    if (m.name) {
-      setStyle(m.nameBold);
-      lines(m.name);
-      setStyle(false);
-    }
-    if (m.signatureTitle) lines(m.signatureTitle);
+    if (m.name) plainLines(m.name, { ...styleOf(), bold: m.nameBold });
+    if (m.signatureTitle) plainLines(m.signatureTitle);
     if (m.enclosure) part([m.enclosure]);
   }
 

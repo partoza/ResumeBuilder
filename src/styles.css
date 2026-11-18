@@ -809,3 +809,27 @@ button { font: inherit; color: inherit; }
 .align-btn:hover { background: var(--bg-muted); color: var(--fg); }
 .align-btn.is-active { background: var(--bg-muted); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border-strong); }
 .align-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+
+/* ============ Rich text box (cover letter paragraphs) ============ */
+.rich-editor {
+  min-height: 96px; max-height: 360px; overflow-y: auto;
+  padding: 10px 12px;
+  font: inherit; font-size: 14px; line-height: 1.55;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.rich-editor:hover { border-color: var(--border-strong); }
+.rich-editor:focus { outline: none; border-color: var(--fg-muted); box-shadow: 0 0 0 3px var(--ring); }
+.rich-editor p { margin: 0 0 .6em; }
+.rich-editor p:last-child { margin-bottom: 0; }
+.rich-editor:empty::before { content: attr(data-placeholder); color: var(--fg-subtle); pointer-events: none; }
+
+/* Bold / Italic buttons share the segmented style of the alignment group */
+.style-btn { font: 600 14px/1 Georgia, 'Times New Roman', serif; color: var(--fg-muted); }
+.style-btn i { font-style: italic; font-weight: 500; }
+.format-bar { flex-wrap: wrap; row-gap: 6px; }
