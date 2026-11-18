@@ -22,6 +22,14 @@ export function buildModel(d) {
       accomplishments: splitItems(e.accomplishments),
     }));
 
+  const trainings = (d.trainings || [])
+    .filter((t) => has(t.name))
+    .map((t) => ({
+      name: t.name.trim(),
+      meta: [t.organizer, t.location].filter(has).map((x) => x.trim()).join(' | '),
+      date: (t.date || '').trim(),
+    }));
+
   const education = d.education
     .filter((e) => has(e.degree) || has(e.institution))
     .map((e) => ({
@@ -54,6 +62,7 @@ export function buildModel(d) {
     summary: (d.summary.text || '').trim().replace(/\s*\n\s*/g, ' '),
     skills: { hard: splitList(d.skills.hard), soft: splitList(d.skills.soft) },
     experience,
+    trainings,
     education,
     credentials,
   };
@@ -64,6 +73,7 @@ export const HEADINGS = {
   summary: 'Summary',
   skills: 'Skills',
   experience: 'Experience',
+  trainings: 'Seminars & Trainings',
   education: 'Education & Credentials',
 };
 

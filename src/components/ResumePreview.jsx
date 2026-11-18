@@ -113,6 +113,20 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
         </Section>
       )}
 
+      {m.trainings.length > 0 && (
+        <Section title={HEADINGS.trainings}>
+          {m.trainings.map((t, i) => (
+            <div className="r-entry" key={i}>
+              <div className="r-row">
+                <span className="r-strong">{t.name}</span>
+                <span className="r-date">{t.date}</span>
+              </div>
+              {t.meta && <div className="r-sub">{t.meta}</div>}
+            </div>
+          ))}
+        </Section>
+      )}
+
       {(m.education.length > 0 || m.credentials.length > 0) && (
         <Section title={HEADINGS.education}>
           {m.education.length > 0 && m.credentials.length > 0 && (

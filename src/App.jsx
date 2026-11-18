@@ -227,6 +227,7 @@ export default function App() {
         skills: { hard: fix(d.skills.hard), soft: fix(d.skills.soft) },
         experience: d.experience.map((e) => ({ ...e, role: fix(e.role), typeOther: fix(e.typeOther), responsibilities: fix(e.responsibilities), accomplishments: fix(e.accomplishments) })),
         education: d.education.map((e) => ({ ...e, degree: fix(e.degree), honors: fix(e.honors) })),
+        trainings: d.trainings.map((t) => ({ ...t, name: fix(t.name) })),
         credentials: d.credentials.map((c) => ({ ...c, name: fix(c.name) })),
       }));
     }

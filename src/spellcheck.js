@@ -115,6 +115,10 @@ export function documentText(kind, data, letter) {
     prose.push(e.role, e.typeOther, e.responsibilities, e.accomplishments);
     names.push(e.organization, e.location, e.website, e.referenceName, e.referenceContact);
   }
+  for (const t of data.trainings || []) {
+    prose.push(t.name);
+    names.push(t.organizer, t.location);
+  }
   for (const e of data.education) {
     prose.push(e.degree, e.honors);
     names.push(e.institution);

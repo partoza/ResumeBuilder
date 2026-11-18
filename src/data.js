@@ -108,6 +108,21 @@ export const SECTIONS = [
     ],
   },
   {
+    id: 'trainings',
+    title: 'Seminars & Trainings',
+    desc: 'Seminars, workshops and trainings you attended — most recent first.',
+    kind: 'list',
+    addLabel: 'Add seminar or training',
+    blank: () => ({ name: '', organizer: '', location: '', date: '' }),
+    itemTitle: (it) => [it.name || 'Untitled seminar / training', it.organizer],
+    fields: [
+      { key: 'name', label: 'Seminar / Training title', placeholder: 'Cybersecurity Awareness Seminar', full: true },
+      { key: 'organizer', label: 'Organizer / Conducted by', placeholder: 'DICT Region XI' },
+      { key: 'location', label: 'Venue / Location (optional)', placeholder: 'Davao City or Online' },
+      { key: 'date', label: 'Date attended', placeholder: 'March 2024' },
+    ],
+  },
+  {
     id: 'education',
     title: 'Education',
     desc: 'Degree, institution and graduation date.',
@@ -147,6 +162,7 @@ export function blankState() {
     summary: { text: '' },
     skills: { hard: '', soft: '' },
     experience: [SECTION_BY_ID.experience.blank()],
+    trainings: [],
     education: [SECTION_BY_ID.education.blank()],
     credentials: [],
   };
@@ -188,6 +204,10 @@ export function sampleState() {
         accomplishments:
           'Cut average clearance processing time from 2 days to 3 hours in a pilot with 1 barangay\nEarned a 1.25 grade and Best Capstone Project among 18 teams',
       },
+    ],
+    trainings: [
+      { name: 'Web Accessibility and Inclusive Design Workshop', organizer: 'DICT Region XI', location: 'Davao City', date: 'February 2024' },
+      { name: 'Introduction to Cloud Computing Seminar', organizer: 'AWS Educate', location: 'Online', date: 'October 2023' },
     ],
     education: [
       { degree: 'Bachelor of Science in Information Technology', institution: 'Polytechnic University of the Philippines', graduation: 'July 2024', honors: 'Cum Laude' },
