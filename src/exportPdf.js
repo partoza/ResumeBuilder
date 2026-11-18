@@ -9,6 +9,7 @@ import inter600 from '@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf
 import inter700 from '@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf?url';
 import { HEADINGS, SUBHEADINGS } from './model.js';
 import { isStandardFont, pdfFontFor, registerPdfFonts, styleKey } from './fonts.js';
+import { paperOf } from './paper.js';
 
 export const MAX_PAGES = 2;
 
@@ -28,7 +29,7 @@ const DOC_LABEL = { resume: 'Resume', letter: 'Cover Letter' };
 
 const PT = 25.4 / 72; // mm per point
 const PX = 25.4 / 96; // mm per CSS pixel
-const PAGE = { w: 210, h: 297, mx: 56 * PX, mt: 52 * PX, mb: 56 * PX };
+const MARGINS = { mx: 56 * PX, mt: 52 * PX, mb: 56 * PX };
 
 const INK = [17, 17, 17];
 const INK2 = [63, 63, 70];
@@ -167,10 +168,12 @@ export function extractEmbedded(text) {
   return null;
 }
 
-async function createPdf(kind, m, { source } = {}) {
+async function createPdf(kind, m, { source, paper } = {}) {
   const [fonts, icons] = await Promise.all([loadFonts(), loadIcons()]);
 
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  const size = paperOf(paper);
+  const PAGE = { w: size.w, h: size.h, ...MARGINS };
+  const doc = new jsPDF({ unit: 'mm', format: [size.w, size.h], orientation: 'portrait', compress: true });
   if (source) {
     // Stored in the PDF's XMP metadata (not visible on the page).
     const payload = JSON.stringify({ app: 'resume-builder', v: 1, kind, data: source });
@@ -661,6 +664,9 @@ async function createPdf(kind, m, { source } = {}) {
   return doc;
 }
 
-/** opts.source: the raw form data to embed so the PDF can be imported back for editing. */
+/**
+ * opts.source: the raw form data to embed so the PDF can be imported back for editing.
+ * opts.paper: 'a4' (default), 'letter' or 'long' (see paper.js).
+ */
 export const createResumePdf = (model, opts) => createPdf('resume', model, opts);
 export const createLetterPdf = (model, opts) => createPdf('letter', model, opts);

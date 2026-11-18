@@ -3,6 +3,7 @@
 import { SECTIONS, blankState } from './data.js';
 import { DEFAULT_FORMAT, LETTER_PART_KEYS, blankLetter, letterHasContent } from './letterData.js';
 import { sectionHasContent } from './utils.js';
+import { DEFAULT_PAPER, PAPERS } from './paper.js';
 
 const KEYS = {
   resume: 'resume-builder:resume:v1',
@@ -132,6 +133,10 @@ export function loadUi() {
   return {
     docTab: saved?.docTab === 'letter' ? 'letter' : 'resume',
     swap: !!saved?.swap,
+    paper: {
+      resume: PAPERS[saved?.paper?.resume] ? saved.paper.resume : DEFAULT_PAPER,
+      letter: PAPERS[saved?.paper?.letter] ? saved.paper.letter : DEFAULT_PAPER,
+    },
   };
 }
 export const saveUi = (ui) => write(KEYS.ui, ui);

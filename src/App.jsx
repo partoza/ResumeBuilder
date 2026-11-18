@@ -10,6 +10,7 @@ import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Download, Logo, Moon,
 import { ensureCssFont, isStandardFont } from './fonts.js';
 import { formatRange, mapRichText, parseRich, runsInRange, serializeRich } from './rich.js';
 import { selectionToRanges } from './previewSelection.js';
+import { PAPERS, paperOf, paperPx } from './paper.js';
 
 const ALIGN_BUTTONS = [
   ['left', 'Align left', AlignLeft],
@@ -28,7 +29,7 @@ import {
   clearLetter, clearResume, hydrateLetter, hydrateResume, loadLetter, loadResume, loadUi, saveLetter, saveResume, saveUi, stripIds,
 } from './storage.js';
 
-const PAPER_W = 794; // A4 width in CSS px at 96 dpi
+const PAPER_OPTIONS = Object.entries(PAPERS).map(([value, p]) => ({ value, label: p.label }));
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
@@ -112,6 +113,7 @@ export default function App() {
   const [docTab, setDocTab] = useState(initialUi.docTab);
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [swap, setSwap] = useState(initialUi.swap);
+  const [paper, setPaper] = useState(initialUi.paper); // per document: { resume, letter }
   const [view, setView] = useState('edit'); // mobile only
   const [zoom, setZoom] = useState('fit');
   const [scale, setScale] = useState(1);
@@ -171,10 +173,12 @@ export default function App() {
   const scrollRef = useRef(null);
   const formScrollRef = useRef(null);
 
-  useEffect(() => { saveUi({ docTab, swap }); }, [docTab, swap]);
+  useEffect(() => { saveUi({ docTab, swap, paper }); }, [docTab, swap, paper]);
 
   const isLetter = docTab === 'letter';
   const docInfo = DOCS[docTab];
+  const docPaper = paper[docTab];
+  const { w: PAPER_W, h: PAPER_H } = paperPx(docPaper);
 
   // One normalized model per document feeds both its preview and its PDF.
   const model = useMemo(() => buildModel(data), [data]);
@@ -428,9 +432,9 @@ export default function App() {
     const fitScale = Math.max(0.3, Math.min(1, (el.clientWidth - pad) / PAPER_W));
     setScale(zoom === 'fit' ? fitScale : zoom);
     if (paperRef.current) setPaperH(paperRef.current.offsetHeight);
-  }, [zoom]);
+  }, [zoom, PAPER_W]);
 
-  useLayoutEffect(fit, [fit, data, letter, docTab, view]);
+  useLayoutEffect(fit, [fit, data, letter, docTab, view, docPaper]);
 
   useEffect(() => {
     const ro = new ResizeObserver(fit);
@@ -443,12 +447,12 @@ export default function App() {
   const stepZoom = (dir) => setZoom(Math.min(1.5, Math.max(0.3, Math.round((scale + dir * 0.1) * 10) / 10)));
 
   /* ---- PDF builders ---- */
-  const buildPdf = () => (isLetter ? createLetterPdf(letterModel) : createResumePdf(model));
+  const buildPdf = () => (isLetter ? createLetterPdf(letterModel, { paper: docPaper }) : createResumePdf(model, { paper: docPaper }));
   // Download/Print also embed the form data, so "Import PDF" can restore every field later.
   const buildExportPdf = () =>
     isLetter
-      ? createLetterPdf(letterModel, { source: letter })
-      : createResumePdf(model, { source: stripIds(data) });
+      ? createLetterPdf(letterModel, { source: letter, paper: docPaper })
+      : createResumePdf(model, { source: stripIds(data), paper: docPaper });
 
   /* ---- print: prints the exact PDF that Download saves ---- */
   const [printing, setPrinting] = useState(false);
@@ -592,7 +596,7 @@ export default function App() {
   const sections = isLetter ? LETTER_SECTIONS : SECTIONS;
   const formState = isLetter ? letter : data;
   const formUpdate = isLetter ? updateLetter : update;
-  const paperStyle = { transform: `scale(${scale})` };
+  const paperStyle = { transform: `scale(${scale})`, width: PAPER_W, minHeight: PAPER_H };
   const docHasContent = isLetter ? letterHasContent(letter) : resumeHasContent;
   const showPdfPages = docHasContent && pdfView.ok && pdfView.tab === docTab;
 
@@ -807,8 +811,18 @@ export default function App() {
               <span className="spell-icon" aria-hidden="true">abc</span>
               {spellOn ? (misspelled.size ? `${misspelled.size} spelling` : 'Spelling OK') : 'Spelling off'}
             </button>
+            <span className="paper-pick" title={`Paper size: ${paperOf(docPaper).name}`}>
+              <Select
+                size="sm"
+                className="tool-paper"
+                ariaLabel="Paper size"
+                value={docPaper}
+                options={PAPER_OPTIONS}
+                onChange={(v) => setPaper((p) => ({ ...p, [docTab]: v }))}
+              />
+            </span>
             <span className={`page-count${overLimit ? ' over' : ''}`}>
-              A4 · {pages} {pages === 1 ? 'page' : 'pages'}
+              {pages} {pages === 1 ? 'page' : 'pages'}
               {overLimit ? ` — over the ${docInfo.max}-page limit` : ` of ${docInfo.max} max`}
               {isLetter && words > 0 && ` · ${words} words`}
             </span>
@@ -835,6 +849,7 @@ export default function App() {
                 key={docTab}
                 build={buildPdf}
                 version={isLetter ? letterModel : model}
+                paper={docPaper}
                 width={PAPER_W * scale}
                 maxPages={docInfo.max}
                 onPageCount={setPages}

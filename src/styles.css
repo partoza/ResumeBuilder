@@ -396,7 +396,7 @@ button { font: inherit; color: inherit; }
   --ink-2: #3f3f46;
   --ink-3: #71717a;
   --rule: #e4e4e7;
-  width: 794px;               /* A4 @ 96dpi */
+  width: 794px;               /* A4 @ 96dpi; App sets the chosen paper size inline */
   min-height: 1123px;
   padding: 52px 56px 56px;
   background: #ffffff;
@@ -633,6 +633,8 @@ button { font: inherit; color: inherit; }
 /* Toolbar sizes for the letter format bar */
 .select-trigger.tool-font { width: 156px; }
 .select-trigger.tool-size { width: 62px; }
+.select-trigger.tool-paper { width: 80px; }
+.toolbar-right .paper-pick { flex: none; display: inline-flex; }
 @media (max-width: 640px) { .select-trigger.tool-font { width: 124px; } }
 
 /* ============ Page-by-page PDF preview ============ */

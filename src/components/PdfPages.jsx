@@ -3,8 +3,6 @@ import { createPortal } from 'react-dom';
 import { loadPdfjs } from '../pdfjs.js';
 import { suggestionsFor, wordOf } from '../spellcheck.js';
 
-const A4_RATIO = 297 / 210;
-
 /**
  * Tag each text-layer span with where its text came from (paragraph index and character
  * offset), using the segments the PDF generator recorded in drawing order. pdf.js creates
@@ -40,9 +38,10 @@ const WORD_RE = /[A-Za-z][A-Za-z'’]*/g;
  *
  * build:      () => Promise<jsPDF>  (the same generator Download/Print use)
  * version:    changes whenever the content changes
+ * paper:      paper size key — a change re-renders too
  * misspelled: Set of words to underline (empty = none)
  */
-export default function PdfPages({ build, version, width, maxPages, onPageCount, onReady, misspelled, onReplace, onIgnore, embeddedFonts = true }) {
+export default function PdfPages({ build, version, paper, width, maxPages, onPageCount, onReady, misspelled, onReplace, onIgnore, embeddedFonts = true }) {
   const [pages, setPages] = useState([]);
   const [menu, setMenu] = useState(null); // { word, rect }
   const job = useRef(0);
@@ -99,7 +98,7 @@ export default function PdfPages({ build, version, width, maxPages, onPageCount,
             pdf.destroy();
             return;
           }
-          rendered.push({ canvas, textLayer });
+          rendered.push({ canvas, textLayer, ratio: viewport.height / viewport.width });
         }
         pdf.destroy();
         setPages(rendered);
@@ -110,7 +109,7 @@ export default function PdfPages({ build, version, width, maxPages, onPageCount,
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [version, width, embeddedFonts]);
+  }, [version, paper, width, embeddedFonts]);
 
   // Underline misspelled words inside the text layers.
   useLayoutEffect(() => {
@@ -157,16 +156,15 @@ export default function PdfPages({ build, version, width, maxPages, onPageCount,
     setMenu({ word: mark.dataset.word, rect: mark.getBoundingClientRect() });
   }
 
-  const height = width * A4_RATIO;
   return (
     <div className="pdf-pages" aria-label="Page preview" onClick={onClick}>
-      {pages.map(({ canvas, textLayer }, i) => {
+      {pages.map(({ canvas, textLayer, ratio }, i) => {
         const over = i >= maxPages;
         return (
           <figure key={i} className={`pdf-page${over ? ' is-over' : ''}`}>
             <div
               className="pdf-sheet"
-              style={{ width, height }}
+              style={{ width, height: width * ratio }}
               ref={(el) => {
                 if (el && el.firstChild !== canvas) el.replaceChildren(canvas, textLayer);
               }}
