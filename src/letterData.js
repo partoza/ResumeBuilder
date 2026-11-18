@@ -29,7 +29,7 @@ export const LETTER_SECTIONS = [
       { key: 'name', label: 'Hiring manager', placeholder: 'Ms. Maria Santos (leave blank if unknown)' },
       { key: 'title', label: 'Their position', placeholder: 'HR Manager' },
       { key: 'company', label: 'Company', placeholder: 'ABC Corporation', full: true },
-      { key: 'address', label: 'Company address', placeholder: '25th Floor, Ayala Avenue, Makati City 1226', full: true },
+      { key: 'address', label: 'Company address', placeholder: 'J.P. Laurel Avenue, Bajada, Davao City 8000', full: true },
     ],
   },
   {
