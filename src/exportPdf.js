@@ -30,6 +30,7 @@ const DOC_LABEL = { resume: 'Resume', letter: 'Cover Letter' };
 const PT = 25.4 / 72; // mm per point
 const PX = 25.4 / 96; // mm per CSS pixel
 const MARGINS = { mx: 56 * PX, mt: 52 * PX, mb: 56 * PX };
+const NAME_PT = 20; // the name at the top of the resume (matches .r-name)
 
 const INK = [17, 17, 17];
 const INK2 = [63, 63, 70];
@@ -342,10 +343,10 @@ async function createPdf(kind, m, { source, paper } = {}) {
   }
 
   if (m.name) {
-    font('I700', 26, INK);
+    font('I700', NAME_PT, INK);
     for (const ln of wrap(m.name, textW)) {
-      text(ln, left, y, 26, 1.1, { charSpace: -26 * 0.03 * PT });
-      y += lh(26, 1.1);
+      text(ln, left, y, NAME_PT, 1.1, { charSpace: -NAME_PT * 0.03 * PT });
+      y += lh(NAME_PT, 1.1);
     }
   }
   if (m.title) {
@@ -396,7 +397,8 @@ async function createPdf(kind, m, { source, paper } = {}) {
   /**
    * Standard business-letter format (mirrors .paper-letter styles):
    * 1in margins, chosen font and size (default Times 12pt), black, single-spaced (1.15),
-   * one blank line between parts and three blank lines for the signature. Text is
+   * one blank line between parts, two above the salutation and the complimentary close,
+   * and three blank lines for the signature. The recipient's name is in bold capitals. Text is
    * real PDF text in every font, so it stays extractable for ATS.
    *
    * Paragraphs are rich: each run can have its own bold / italic / size / font. Every
@@ -544,10 +546,10 @@ async function createPdf(kind, m, { source, paper } = {}) {
     const line = (key) => {
       if (m.parts?.[key]) richParagraph(m.parts[key], { part: key }, 'left');
     };
-    const part = (keys) => {
+    const part = (keys, gap = 1) => {
       const present = keys.filter((k) => m.parts?.[k]);
       if (!present.length) return;
-      if (!first) blank();
+      if (!first) blank(gap);
       first = false;
       present.forEach(line);
     };
@@ -555,19 +557,19 @@ async function createPdf(kind, m, { source, paper } = {}) {
     part(['date']);
     part(m.recipientKeys || []);
     part(['subject']);
-    part(['salutation']);
+    part(['salutation'], 2); // two blank lines above the salutation
     m.paragraphs.forEach((runs, i) => {
       if (!first) blank();
       first = false;
       richParagraph(runs, { para: i });
     });
-    // Keep the close, signature space, name and title together on one page.
-    if (ly + LINE * 7 > lbottom) {
+    // Keep the close (with its two blank lines), signature space, name and title together on one page.
+    if (ly + LINE * 8 > lbottom) {
       doc.addPage();
       ly = M;
       first = true;
     }
-    part(['complimentary']);
+    part(['complimentary'], 2); // two blank lines above "Sincerely,"
     blank(3);
     line('name');
     line('title');
@@ -631,6 +633,18 @@ async function createPdf(kind, m, { source, paper } = {}) {
         level(SUBHEADINGS.accomplishments);
         bullets(e.accomplishments);
       }
+    });
+  }
+
+  /* ---------- seminars & trainings ---------- */
+
+  if (m.trainings.length) {
+    sectionTitle(HEADINGS.trainings, lh(10.5) + lh(10));
+    m.trainings.forEach((t, i) => {
+      if (i > 0) y += 12 * PX;
+      ensure(lh(10.5) + (t.meta ? lh(10) : 0));
+      titleRow(t.name, t.date);
+      if (t.meta) paragraph(t.meta, 10);
     });
   }
 

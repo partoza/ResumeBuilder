@@ -411,7 +411,7 @@ button { font: inherit; color: inherit; }
 }
 .r-head { display: flex; justify-content: space-between; gap: 28px; align-items: flex-start; padding-bottom: 18px; border-bottom: 2px solid var(--ink); }
 .r-head-text { min-width: 0; }
-.r-name { font-size: 26pt; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em; margin: 0; }
+.r-name { font-size: 20pt; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em; margin: 0; }
 .r-role { font-size: 11.5pt; color: var(--ink-2); margin-top: 6px; font-weight: 500; }
 .r-contact { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 12px; font-size: 9.5pt; color: var(--ink-2); }
 .r-contact span, .r-contact a { display: inline-flex; align-items: center; gap: 6px; }
@@ -452,7 +452,7 @@ button { font: inherit; color: inherit; }
 
 /* Cover letter — standard business format, mirrors drawLetter() in exportPdf.js:
    1in margins, Times New Roman 12pt, single-spaced (1.15), one blank line between parts,
-   three blank lines for the signature. */
+   two above the salutation and the close, three blank lines for the signature. */
 .paper.paper-letter {
   padding: 96px;                       /* 1 inch on every side */
   font-family: "Times New Roman", Times, "Liberation Serif", serif;
@@ -465,6 +465,8 @@ button { font: inherit; color: inherit; }
 .r-letter p, .r-letter address { margin: 0; font-style: normal; }
 .r-letter .l-block { margin-top: 1.15em; }          /* one blank line */
 .r-letter .l-name { margin-top: calc(1.15em * 3); } /* three blank lines to sign */
+.r-letter .l-gap2 { margin-top: calc(1.15em * 2); } /* two blank lines: salutation, close */
+.r-letter .l-to { font-weight: 700; }
 
 /* ============ Toast ============ */
 .toast {

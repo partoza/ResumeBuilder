@@ -1,6 +1,7 @@
 // Cover letter: form schema, starting data and the model the preview/PDF render from.
-// Standard block-format business letter: date, inside address, Re: line, salutation,
-// opening / body / closing paragraphs, complimentary close, signature.
+// Standard block-format business letter: date, inside address (name in bold capitals), Re: line,
+// two blank lines, salutation, opening / body / closing paragraphs, two blank lines,
+// complimentary close, signature.
 import { fullName, has } from './utils.js';
 import { LETTER_FONTS, letterFont } from './fonts.js';
 import { RUN_SIZES, paragraphText, parseRich, richPlain } from './rich.js';
@@ -9,14 +10,18 @@ export { LETTER_FONTS, letterFont };
 
 export const COMPLIMENTARY_CLOSES = ['Sincerely,', 'Respectfully yours,', 'Very truly yours,', 'Best regards,'];
 
-/** Opening word(s) of the automatic salutation. "To Whom It May Concern" stands alone. */
-export const GREETINGS = ['Dear', 'Good day', 'Greetings', 'Hello', 'To Whom It May Concern', 'Other'];
+/**
+ * Opening word(s) of the automatic salutation. "To Whom It May Concern" stands alone;
+ * "None" leaves out the greeting word, e.g. "Hiring Manager:".
+ */
+export const NO_GREETING = 'None';
+export const GREETINGS = ['Dear', NO_GREETING, 'Good day', 'Greetings', 'Hello', 'To Whom It May Concern', 'Other'];
 export const DEFAULT_GREETING = 'Dear';
 
 /** Base text sizes for the whole letter (selected text can use any size in RUN_SIZES). */
 export const LETTER_SIZES = RUN_SIZES;
 export const LETTER_ALIGNS = ['left', 'center', 'right', 'justify'];
-export const DEFAULT_FORMAT = { font: 'Times New Roman', size: 12, align: 'left' };
+export const DEFAULT_FORMAT = { font: 'Times New Roman', size: 12, align: 'justify' };
 
 export const LETTER_SECTIONS = [
   {
@@ -26,7 +31,7 @@ export const LETTER_SECTIONS = [
     kind: 'object',
     fields: [
       { key: 'date', label: 'Date', type: 'date', full: true },
-      { key: 'name', label: 'Hiring manager', placeholder: 'Ms. Maria Santos (leave blank if unknown)' },
+      { key: 'name', label: 'Hiring manager', placeholder: 'Ms. Maria Santos (leave blank if unknown)', hint: 'Shown in bold capitals. Left blank, the letter says HIRING MANAGER.' },
       { key: 'title', label: 'Their position', placeholder: 'HR Manager' },
       { key: 'company', label: 'Company', placeholder: 'ABC Corporation', full: true },
       { key: 'address', label: 'Company address', placeholder: 'J.P. Laurel Avenue, Bajada, Davao City 8000', full: true },
@@ -35,11 +40,14 @@ export const LETTER_SECTIONS = [
   {
     id: 'content',
     title: 'Letter',
-    desc: 'Three short parts: opening, why you fit, and closing.',
+    desc: 'Three paragraphs: the job and where you found it, your experience and skills, and your closing with your contact details.',
     kind: 'object',
     fields: [
       { key: 'position', label: 'Position applied for', placeholder: 'Junior Web Developer', full: true },
-      { key: 'greeting', label: 'Greeting', type: 'select', options: GREETINGS },
+      {
+        key: 'greeting', label: 'Greeting', type: 'select', options: GREETINGS,
+        hint: 'Choose “None” to start with just the name, e.g. “Hiring Manager:”.',
+      },
       {
         key: 'greetingOther', label: 'Your greeting', placeholder: 'e.g. Good morning, Hi, Magandang araw',
         hint: 'Followed by the recipient’s name, e.g. “Good morning, Ms. Santos:”.',
@@ -50,19 +58,19 @@ export const LETTER_SECTIONS = [
         hint: 'Leave blank to use the greeting with the recipient’s name, e.g. “Dear Ms. Santos:” or “Dear Hiring Manager:”.',
       },
       {
-        key: 'opening', label: 'Opening paragraph', type: 'rich', full: true,
-        hint: 'Name the position, where you found it, and one line on why you’re a strong fit.',
-        placeholder: 'I am writing to apply for the Junior Web Developer position advertised on JobStreet…',
+        key: 'opening', label: 'First paragraph — the job', type: 'rich', full: true,
+        hint: 'Say where you found this job posting (e.g. JobStreet, the company’s careers page, a referral) and the position you’re applying for.',
+        placeholder: 'I saw your job posting for the Junior Web Developer position on JobStreet, and I am writing to express my interest…',
       },
       {
-        key: 'body', label: 'Body', type: 'rich', full: true,
-        hint: 'Connect your skills and results to what the employer needs. Leave a blank line to start a new paragraph.',
-        placeholder: 'During my internship at …, I built … which resulted in …',
+        key: 'body', label: 'Second paragraph — experience and skills', type: 'rich', full: true,
+        hint: 'Your experience and skills, and how they fit what the employer needs. Leave a blank line to start a new paragraph.',
+        placeholder: 'Through my internship at …, I gained hands-on experience in … I also developed skills in …',
       },
       {
-        key: 'closing', label: 'Closing paragraph', type: 'rich', full: true,
-        hint: 'Restate your interest, ask for an interview, and thank the reader.',
-        placeholder: 'I would welcome the opportunity to discuss how I can contribute to your team…',
+        key: 'closing', label: 'Third paragraph — closing and contact', type: 'rich', full: true,
+        hint: 'Restate your interest, thank the reader, and end with your contact number and email.',
+        placeholder: 'Thank you for considering my application. I can be reached at 0917 123 4567 or name@email.com…',
       },
     ],
   },
@@ -112,11 +120,11 @@ export function sampleLetter() {
       greetingOther: '',
       salutation: '',
       opening:
-        'I am writing to apply for the Junior Web Developer position at Northwind Digital Inc., which I found on JobStreet. As a Cum Laude graduate in Information Technology with hands-on agency experience in React, I am confident I can help your team ship reliable, user-friendly web products from day one.',
+        'I saw your job posting for the Junior Web Developer position on JobStreet, and I am writing to express my interest in joining Northwind Digital Inc. As a Cum Laude graduate in Information Technology with hands-on experience in React, I am confident I can help your team ship reliable, user-friendly web products from day one.',
       body:
-        'During my internship at Bright Pixel Digital Solutions, I built responsive landing pages from Figma designs and developed reusable React components for two client dashboards. I resolved more than 40 UI bugs before launch and reduced page load time by 35% by optimizing images and scripts.\n\nAs lead developer of our capstone project, I guided a four-member team in building a barangay clearance request system that cut processing time from two days to three hours. That experience taught me to communicate clearly, document my work, and stay calm under deadlines. These are habits I would bring to Northwind.',
+        'During my internship at Bright Pixel Digital Solutions, I built responsive landing pages from Figma designs, developed reusable React components for two client dashboards, and resolved more than 40 UI bugs before launch. As lead developer of our capstone project, I guided a four-member team in building a barangay clearance request system that cut processing time from two days to three hours. These experiences strengthened my skills in JavaScript, React, Git and MySQL, as well as clear communication, documentation and teamwork under deadlines.',
       closing:
-        'I would welcome the opportunity to discuss how my skills can support your development team. Thank you for your time and consideration. I look forward to hearing from you.',
+        'I would welcome the opportunity to discuss how my skills can support your development team. Thank you for your time and consideration. I can be reached at 0917 123 4567 or andrea.villanueva@email.com. I look forward to hearing from you.',
     },
     signoff: { name: 'Andrea Reyes Villanueva', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: true },
     format: { ...DEFAULT_FORMAT },
@@ -143,11 +151,12 @@ function addressee(recipientName) {
 
 /**
  * Salutation from a greeting and the recipient's name:
- * Dear → "Dear Ms. Lim:"   Good day → "Good day, Ms. Lim:"   Greetings → "Greetings, Ms. Lim:"
+ * Dear → "Dear Ms. Lim:"   None → "Ms. Lim:"   Good day → "Good day, Ms. Lim:"   Greetings → "Greetings, Ms. Lim:"
  * Hello → "Hello Ms. Lim:"   To Whom It May Concern → "To Whom It May Concern:"
  * Other + "Good morning" → "Good morning, Ms. Lim:"  (business-letter colon)
  */
 export function autoSalutation(recipientName, greeting = DEFAULT_GREETING, other = '') {
+  if (greeting === NO_GREETING) return `${addressee(recipientName)}:`;
   if (greeting === 'Other') {
     const custom = String(other || '').trim().replace(/[,:]+$/, '');
     if (custom) return `${custom}, ${addressee(recipientName)}:`;
@@ -195,7 +204,8 @@ export function buildLetterModel(personal, letter) {
   // so formatting is stored per part (letter.styles[key]) and reused while the text matches.
   const partTexts = [
     ['date', formatLongDate(r.date)],
-    ['recipient.name', recipientName],
+    // First line of the inside address: the recipient's name (or HIRING MANAGER) in bold capitals.
+    ['recipient.name', (recipientName || 'Hiring Manager').toUpperCase()],
     ['recipient.title', (r.title || '').trim()],
     ['recipient.company', (r.company || '').trim()],
     ['recipient.address', (r.address || '').trim()],
@@ -208,7 +218,8 @@ export function buildLetterModel(personal, letter) {
   ];
   const parts = {};
   for (const [key, text] of partTexts) {
-    if (text) parts[key] = partRuns(letter.styles?.[key], text, key === 'name' && nameBold ? { bold: true } : {});
+    const bold = (key === 'name' && nameBold) || key === 'recipient.name';
+    if (text) parts[key] = partRuns(letter.styles?.[key], text, bold ? { bold: true } : {});
   }
 
   const fontsUsed = new Set([font.name]);
@@ -218,7 +229,7 @@ export function buildLetterModel(personal, letter) {
     font,
     fontsUsed: [...fontsUsed],
     size: LETTER_SIZES.includes(Number(format.size)) ? Number(format.size) : DEFAULT_FORMAT.size,
-    align: LETTER_ALIGNS.includes(format.align) ? format.align : 'left',
+    align: LETTER_ALIGNS.includes(format.align) ? format.align : DEFAULT_FORMAT.align,
     parts,
     date: parts.date ? partTexts[0][1] : '',
     recipient: ['recipient.name', 'recipient.title', 'recipient.company', 'recipient.address'].filter((k) => parts[k]).map((k) => paragraphText(parts[k])),

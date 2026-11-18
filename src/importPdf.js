@@ -275,8 +275,9 @@ const HEADING_WORDS = {
   education: ['education', 'educational attainment', 'educational background', 'academic background', 'academic history',
     'education and credentials', 'education and training', 'education and certifications'],
   credentials: ['certifications', 'certification', 'certifications and licenses', 'licenses and certifications', 'licenses', 'license',
-    'licensure', 'eligibility', 'civil service eligibility', 'seminars', 'trainings', 'seminars and trainings', 'trainings and seminars',
-    'seminars and trainings attended', 'trainings attended', 'seminars attended', 'credentials'],
+    'licensure', 'eligibility', 'civil service eligibility', 'credentials'],
+  trainings: ['seminars', 'trainings', 'seminars and trainings', 'trainings and seminars', 'seminars and trainings attended',
+    'trainings attended', 'seminars attended', 'seminars and workshops', 'workshops', 'trainings and workshops'],
   ignore: ['references', 'reference', 'character references', 'personal information', 'personal data', 'personal details',
     'personal background', 'interests', 'hobbies', 'languages', 'awards', 'affiliations', 'organizations', 'declaration'],
 };
@@ -649,6 +650,11 @@ export function parseResume(lines) {
     skills: { hard: hard.join(', '), soft: soft.join(', ') },
     experience: parseExperience(sections.experience || []),
     education: parseEducation(sections.education || []),
+    // Seminars & trainings read like certifications: "Title ⇥ Date", then "Organizer | Venue".
+    trainings: parseCredentials(sections.trainings || []).map(({ name, issuer, date }) => {
+      const [organizer = '', ...venue] = issuer.split(/\s*[|·]\s*/);
+      return { name, organizer, location: venue.join(', '), date };
+    }),
     credentials: parseCredentials(sections.credentials || []),
   };
 }
@@ -708,7 +714,9 @@ export function parseLetter(lines) {
     let i = 0;
     const isJobTitle = (t) => !/^(mr|ms|mrs|miss|dr|engr|atty|prof)\.?\s/i.test(t)
       && /\b(manager|officer|director|head|supervisor|specialist|coordinator|recruiter|hr|human resources|lead|assistant|associate|committee|department|president|ceo|cto|owner|principal|dean|chair(person)?|administrator|executive)\b/i.test(t);
-    if (!isCompany(block[0]) && !ADDRESS_HINT.test(block[0]) && !isJobTitle(block[0])) recipient.name = block[i++];
+    const unCaps = (t) => (/[a-z]/.test(t) ? t : t.toLowerCase().replace(/(^|[\s.'-])([a-z])/g, (_, a, b) => a + b.toUpperCase()));
+    if (/^hiring manager$/i.test(block[0])) i++; // the letter's stand-in when no name was given
+    else if (!isCompany(block[0]) && !ADDRESS_HINT.test(block[0]) && !isJobTitle(block[0])) recipient.name = unCaps(block[i++]);
     if (block[i] && !isCompany(block[i]) && !ADDRESS_HINT.test(block[i]) && block[i].length < 60) recipient.title = block[i++];
     if (block[i] && !ADDRESS_HINT.test(block[i]) || block[i] && isCompany(block[i])) recipient.company = block[i++];
     recipient.address = block.slice(i).join(', ');
