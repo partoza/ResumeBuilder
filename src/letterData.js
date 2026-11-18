@@ -99,7 +99,7 @@ export function blankLetter() {
   return {
     recipient: { date: todayIso(), name: '', title: '', company: '', address: '' },
     content: { position: '', greeting: DEFAULT_GREETING, greetingOther: '', salutation: '', opening: '', body: '', closing: '' },
-    signoff: { name: '', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: true },
+    signoff: { name: '', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false },
     format: { ...DEFAULT_FORMAT },
     styles: {},
   };
@@ -126,7 +126,7 @@ export function sampleLetter() {
       closing:
         'I would welcome the opportunity to discuss how my skills can support your development team. Thank you for your time and consideration. I can be reached at 0917 123 4567 or andrea.villanueva@email.com. I look forward to hearing from you.',
     },
-    signoff: { name: 'Andrea Reyes Villanueva', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: true },
+    signoff: { name: 'Andrea Reyes Villanueva', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false },
     format: { ...DEFAULT_FORMAT },
     styles: {},
   };
