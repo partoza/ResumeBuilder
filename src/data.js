@@ -74,7 +74,7 @@ export const SECTIONS = [
     desc: 'Work, OJT, apprenticeship or major school projects — most recent first.',
     kind: 'list',
     addLabel: 'Add experience',
-    blank: () => ({ type: 'Work Experience', typeOther: '', role: '', organization: '', location: '', website: '', referenceName: '', referenceContact: '', start: '', end: '', current: false, responsibilities: '', accomplishments: '' }),
+    blank: () => ({ type: 'Work Experience', typeOther: '', role: '', organization: '', location: '', website: '', start: '', end: '', current: false, responsibilities: '', accomplishments: '' }),
     itemTitle: (it) => [it.role || 'Untitled role', it.organization || experienceLabel(it) || it.type],
     fields: [
       { key: 'type', label: 'Type', type: 'select', options: EXPERIENCE_TYPES },
@@ -86,8 +86,6 @@ export const SECTIONS = [
       { key: 'organization', label: 'Organization / School', placeholder: 'ABC Corporation' },
       { key: 'location', label: 'Location', placeholder: 'Davao City' },
       { key: 'website', label: 'Company website (optional)', type: 'url', placeholder: 'abccorp.com.ph', full: true, check: checkUrl },
-      { key: 'referenceName', label: 'Reference name (optional)', placeholder: 'Ms. Maria Reyes, Team Leader' },
-      { key: 'referenceContact', label: 'Reference contact (optional)', placeholder: '0918 765 4321 or email' },
       { key: 'start', label: 'Start date', placeholder: 'Jun 2023' },
       { key: 'end', label: 'End date', placeholder: 'Dec 2023', disabledWhen: 'current' },
       { key: 'current', label: 'I’m currently in this role', type: 'checkbox', full: true },
@@ -105,21 +103,6 @@ export const SECTIONS = [
         hint: 'Use numbers: %, ₱, time saved, volume handled, ranking.',
         placeholder: 'Maintained a 96% customer satisfaction score across 3 months. Cut report preparation time by 30% with an Excel template.',
       },
-    ],
-  },
-  {
-    id: 'trainings',
-    title: 'Seminars & Trainings',
-    desc: 'Seminars, workshops and trainings you attended — most recent first.',
-    kind: 'list',
-    addLabel: 'Add seminar or training',
-    blank: () => ({ name: '', organizer: '', location: '', date: '' }),
-    itemTitle: (it) => [it.name || 'Untitled seminar / training', it.organizer],
-    fields: [
-      { key: 'name', label: 'Seminar / Training title', placeholder: 'Cybersecurity Awareness Seminar', full: true },
-      { key: 'organizer', label: 'Organizer / Conducted by', placeholder: 'DICT Region XI' },
-      { key: 'location', label: 'Venue / Location (optional)', placeholder: 'Davao City or Online' },
-      { key: 'date', label: 'Date attended', placeholder: 'March 2024' },
     ],
   },
   {
@@ -152,6 +135,36 @@ export const SECTIONS = [
       { key: 'number', label: 'License / Certificate no. (optional)', placeholder: '', full: true },
     ],
   },
+  {
+    id: 'trainings',
+    title: 'Seminars & Trainings',
+    desc: 'Seminars, workshops and trainings you attended — most recent first.',
+    kind: 'list',
+    addLabel: 'Add seminar or training',
+    blank: () => ({ name: '', organizer: '', location: '', date: '' }),
+    itemTitle: (it) => [it.name || 'Untitled seminar / training', it.organizer],
+    fields: [
+      { key: 'name', label: 'Seminar / Training title', placeholder: 'Cybersecurity Awareness Seminar', full: true },
+      { key: 'organizer', label: 'Organizer / Conducted by', placeholder: 'DICT Region XI' },
+      { key: 'location', label: 'Venue / Location (optional)', placeholder: 'Davao City or Online' },
+      { key: 'date', label: 'Date attended', placeholder: 'March 2024' },
+    ],
+  },
+  {
+    id: 'references',
+    title: 'References',
+    desc: 'People who can vouch for your work or character — shown at the end of the resume.',
+    kind: 'list',
+    addLabel: 'Add reference',
+    blank: () => ({ name: '', position: '', organization: '', contact: '' }),
+    itemTitle: (it) => [it.name || 'Untitled reference', it.organization],
+    fields: [
+      { key: 'name', label: 'Full name', placeholder: 'Ms. Maria Reyes', full: true },
+      { key: 'position', label: 'Position', placeholder: 'Team Leader' },
+      { key: 'organization', label: 'Company / Organization', placeholder: 'ABC Corporation' },
+      { key: 'contact', label: 'Contact number or email', placeholder: '0918 765 4321 or email', full: true },
+    ],
+  },
 ];
 
 export const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
@@ -165,6 +178,7 @@ export function blankState() {
     trainings: [],
     education: [SECTION_BY_ID.education.blank()],
     credentials: [],
+    references: [],
   };
 }
 
@@ -188,7 +202,7 @@ export function sampleState() {
     experience: [
       {
         type: 'OJT / Internship', role: 'Web Developer Intern', organization: 'Bright Pixel Digital Solutions', location: 'Pasig City',
-        website: 'brightpixel.ph', referenceName: 'Engr. Ramon P. Cruz, Senior Software Engineer', referenceContact: '0918 765 4321',
+        website: 'brightpixel.ph',
         start: 'Jan 2024', end: 'May 2024', current: false,
         responsibilities:
           'Built responsive landing pages in HTML, CSS and JavaScript from Figma designs\nDeveloped reusable React components for two client dashboards\nCollaborated with QA in weekly sprints using Git and GitHub pull requests',
@@ -197,7 +211,7 @@ export function sampleState() {
       },
       {
         type: 'School Project', role: 'Lead Developer, Barangay Clearance Request System (Capstone)', organization: 'Polytechnic University of the Philippines', location: 'Manila',
-        website: '', referenceName: '', referenceContact: '',
+        website: '',
         start: 'Aug 2023', end: 'Apr 2024', current: false,
         responsibilities:
           'Led a 4-member team in planning, building and testing a web-based request system\nDesigned the MySQL database and REST API used by the front end',
@@ -216,6 +230,10 @@ export function sampleState() {
       { name: 'Career Service Professional Eligibility', issuer: 'Civil Service Commission', date: 'August 2024', number: '' },
       { name: 'Computer Systems Servicing NC II', issuer: 'TESDA', date: 'March 2023', number: '' },
       { name: 'Responsive Web Design Certification', issuer: 'freeCodeCamp', date: 'October 2023', number: '' },
+    ],
+    references: [
+      { name: 'Engr. Ramon P. Cruz', position: 'Senior Software Engineer', organization: 'Bright Pixel Digital Solutions', contact: '0918 765 4321' },
+      { name: 'Prof. Liza M. Santos', position: 'Capstone Adviser', organization: 'Polytechnic University of the Philippines', contact: 'lsantos@pup.edu.ph' },
     ],
   };
 }

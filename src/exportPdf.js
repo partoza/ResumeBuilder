@@ -1,5 +1,5 @@
 // PDF generator that draws the same design as the on-screen preview (ResumePreview.jsx
-// + .paper styles) with jsPDF. All words are real, selectable text in embedded Inter,
+// + .paper styles) with jsPDF, in any of the resume designs (designs.js). All words are real, selectable text in embedded Inter,
 // so the file stays ATS-readable; only the photo and the small contact icons are images.
 import { jsPDF } from 'jspdf';
 import inter400 from '@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf?url';
@@ -8,7 +8,8 @@ import inter500 from '@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf?url
 import inter600 from '@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf?url';
 import inter700 from '@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf?url';
 import { HEADINGS, SUBHEADINGS } from './model.js';
-import { isStandardFont, pdfFontFor, registerPdfFonts, styleKey } from './fonts.js';
+import { fontByName, isStandardFont, pdfFontFor, registerPdfFonts, styleKey } from './fonts.js';
+import { designOf } from './designs.js';
 import { paperOf } from './paper.js';
 
 export const MAX_PAGES = 2;
@@ -36,7 +37,6 @@ const INK = [17, 17, 17];
 const INK2 = [63, 63, 70];
 const INK3 = [113, 113, 122];
 const RULE = [228, 228, 231];
-const CHIP_BG = [250, 250, 250];
 
 /* ------------------------------------------------------------------ */
 /* Assets: fonts and contact icons (loaded once, then cached)          */
@@ -96,14 +96,14 @@ const ICON_SVG = {
   globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
 };
 
-let iconsPromise = null;
-function loadIcons() {
-  if (!iconsPromise) {
-    iconsPromise = Promise.all(
+const iconSets = new Map(); // stroke color → Promise({ key: PNG data URL })
+function loadIcons(color = '#71717a') {
+  if (!iconSets.has(color)) {
+    iconSets.set(color, Promise.all(
       Object.entries(ICON_SVG).map(
         ([key, inner]) =>
           new Promise((resolve) => {
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
             const img = new Image();
             img.onload = () => {
               const c = document.createElement('canvas');
@@ -115,9 +115,9 @@ function loadIcons() {
             img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
           })
       )
-    ).then(Object.fromEntries);
+    ).then(Object.fromEntries));
   }
-  return iconsPromise;
+  return iconSets.get(color);
 }
 
 /** Start fetching fonts/icons early so the first download is instant. */
@@ -169,8 +169,9 @@ export function extractEmbedded(text) {
   return null;
 }
 
-async function createPdf(kind, m, { source, paper } = {}) {
-  const [fonts, icons] = await Promise.all([loadFonts(), loadIcons()]);
+async function createPdf(kind, m, { source, paper, design } = {}) {
+  const D = designOf(design);
+  const [fonts, icons] = await Promise.all([loadFonts(), loadIcons(kind === 'resume' ? D.header.icon : undefined)]);
 
   const size = paperOf(paper);
   const PAGE = { w: size.w, h: size.h, ...MARGINS };
@@ -181,7 +182,14 @@ async function createPdf(kind, m, { source, paper } = {}) {
     doc.addMetadata(`${EMBED_TAG}:${toBase64Utf8(payload)}:${EMBED_TAG}`, EMBED_NS);
   }
   const plain = (s) => String(s ?? '');
-  const T = fonts ? plain : pdfText;
+  // A serif design draws with its embedded serif (regular, bold, italic) in place of Inter.
+  const serif = kind === 'resume' && D.serif ? fontByName(D.serif) : null;
+  const serifOk = serif ? await registerPdfFonts(doc, new Map([[serif.name, new Set(['r', 'b', 'i'])]])) : new Set();
+  const useSerif = !!serif && ['r', 'b', 'i'].every((k) => serifOk.has(`${serif.name}|${k}`));
+  const SERIF_FACE = useSerif
+    ? { I400: `${serif.key}-r`, I400i: `${serif.key}-i`, I500: `${serif.key}-r`, I600: `${serif.key}-b`, I700: `${serif.key}-b` }
+    : null;
+  const T = useSerif ? (s) => plain(s).replace(/₱\s?/g, 'PHP ') : fonts ? plain : pdfText;
   // The resume uses Inter; a cover letter registers only the fonts and styles it actually uses.
   const needsInter = kind === 'resume';
   const letterFaces = kind === 'letter' ? await registerPdfFonts(doc, letterFontUsage(m)) : null;
@@ -205,15 +213,19 @@ async function createPdf(kind, m, { source, paper } = {}) {
   let y = PAGE.mt;
 
   const font = (name, size, color = INK) => {
-    if (fonts) doc.setFont(name, 'normal');
+    if (SERIF_FACE) doc.setFont(SERIF_FACE[name], 'normal');
+    else if (fonts) doc.setFont(name, 'normal');
     else doc.setFont(...FALLBACK[name]);
     doc.setFontSize(size);
     doc.setTextColor(color[0], color[1], color[2]);
   };
   // Line box height and where the baseline sits inside it, matching CSS line-height
   // for Inter (ascent 0.969em, content height 1.21em, centered in the line box).
+  // A serif design uses its own font's metrics.
+  const ASC = useSerif ? serif.ascent : 0.969;
+  const CONTENT = useSerif ? serif.ascent + serif.descent : 1.21;
   const lh = (size, f = 1.5) => size * f * PT;
-  const baseline = (size, f = 1.5) => ((f * size - 1.21 * size) / 2 + 0.969 * size) * PT;
+  const baseline = (size, f = 1.5) => ((f * size - CONTENT * size) / 2 + ASC * size) * PT;
   const text = (s, x, top, size, f = 1.5, opts = {}) =>
     doc.text(T(s), x, top + baseline(size, f), { baseline: 'alphabetic', ...opts });
   const wrap = (s, w) => doc.splitTextToSize(T(s), w);
@@ -230,13 +242,57 @@ async function createPdf(kind, m, { source, paper } = {}) {
 
   /* ---------- building blocks ---------- */
 
+  const S = D.section;
+  const fill = (c) => doc.setFillColor(c[0], c[1], c[2]);
+
   function sectionTitle(title, keepWith) {
+    const label = title.toUpperCase();
+    const spacing = 9 * 0.12 * PT;
+
     y += 20 * PX;
+    if (S.style === 'bar') {
+      // A tinted bar with an accent block on the left.
+      const h = lh(9) + 8 * PX;
+      ensure(h + 10 * PX + keepWith);
+      fill(S.bar);
+      doc.rect(left, y, width, h, 'F');
+      fill(S.mark);
+      doc.rect(left, y, 3.5 * PX, h, 'F');
+      font('I700', 9, S.color);
+      text(label, left + 12 * PX, y + 4 * PX, 9, 1.5, { charSpace: spacing });
+      y += h + 10 * PX;
+      return;
+    }
+
     ensure(lh(9) + 6 * PX + 10 * PX + keepWith);
-    font('I700', 9, INK);
-    text(title.toUpperCase(), left, y, 9, 1.5, { charSpace: 9 * 0.12 * PT });
+    font('I700', 9, S.color);
+    if (S.style === 'center') {
+      // ——— TITLE ———
+      const tw = doc.getTextWidth(T(label)) + spacing * (label.length - 1);
+      const x = left + (width - tw) / 2;
+      text(label, x, y, 9, 1.5, { charSpace: spacing });
+      fill(S.rule);
+      const mid = y + lh(9) / 2;
+      doc.rect(left, mid, Math.max(0, x - 10 * PX - left), 0.75 * PX, 'F');
+      doc.rect(x + tw + 10 * PX, mid, Math.max(0, right - (x + tw + 10 * PX)), 0.75 * PX, 'F');
+      y += lh(9) + 10 * PX;
+      return;
+    }
+
+    if (S.style === 'underline') {
+      // Title with a short accent underline.
+      text(label, left, y, 9, 1.5, { charSpace: spacing });
+      y += lh(9) + 4 * PX;
+      fill(S.rule);
+      doc.rect(left, y, 28 * PX, 2 * PX, 'F');
+      y += 2 * PX + 9 * PX;
+      return;
+    }
+
+    // 'rule': title, then a full-width hairline.
+    text(label, left, y, 9, 1.5, { charSpace: spacing });
     y += lh(9) + 6 * PX;
-    rule(y, 1 * PX, RULE);
+    rule(y, 1 * PX, S.rule);
     y += 1 * PX + 10 * PX;
   }
 
@@ -265,8 +321,12 @@ async function createPdf(kind, m, { source, paper } = {}) {
       font('I400', 10.5, INK2);
       const lines = wrap(item, width - indent);
       ensure(lh(10.5) * Math.min(lines.length, 2));
-      doc.setFillColor(INK3[0], INK3[1], INK3[2]);
-      doc.circle(left + 9 * PX, y + baseline(10.5) - 10.5 * 0.3 * PT, 0.55, 'F');
+      const { shape, color } = D.bullet;
+      const cx = left + 9 * PX;
+      const cy = y + baseline(10.5) - 10.5 * 0.3 * PT;
+      fill(color);
+      if (shape === 'square') doc.rect(cx - 0.55, cy - 0.55, 1.1, 1.1, 'F');
+      else doc.circle(cx, cy, 0.55, 'F');
       lines.forEach((ln, j) => {
         if (j > 0) ensure(lh(10.5));
         font('I400', 10.5, INK2);
@@ -277,10 +337,16 @@ async function createPdf(kind, m, { source, paper } = {}) {
   }
 
   function chips(items) {
+    const K = D.skills;
+    if (K.style === 'text') {
+      // A plain list: "HTML5 · CSS3 · React"
+      paragraph(items.join('  ·  '), 10, K.text);
+      return;
+    }
     const h = 25 * PX;
     const padX = 10 * PX;
     const gap = 6 * PX;
-    font('I400', 9.5, INK2);
+    font('I400', 9.5, K.text);
     let x = left;
     ensure(h);
     for (const item of items) {
@@ -290,11 +356,11 @@ async function createPdf(kind, m, { source, paper } = {}) {
         y += h + gap;
         ensure(h);
       }
-      doc.setFillColor(...CHIP_BG);
-      doc.setDrawColor(...RULE);
+      doc.setFillColor(...K.bg);
+      doc.setDrawColor(...K.border);
       doc.setLineWidth(1 * PX);
       doc.roundedRect(x + 0.5 * PX, y + 0.5 * PX, w - PX, h - PX, 4 * PX, 4 * PX, 'FD');
-      font('I400', 9.5, INK2);
+      font('I400', 9.5, K.text);
       text(item, x + padX, y + 3 * PX, 9.5);
       x += w + gap;
     }
@@ -327,72 +393,118 @@ async function createPdf(kind, m, { source, paper } = {}) {
 
   /* ---------- header ---------- */
 
+  const H = D.header;
+  const band = H.style === 'band';
+  const center = H.align === 'center';
   const photoSize = 1.5 * 25.4; // 1.5in, like the preview
-  const headTop = y;
-  const textW = m.photo ? width - photoSize - 28 * PX : width;
+  const photoAbove = center && !!m.photo; // a centered header puts the photo above the name
+  const textW = m.photo && !photoAbove ? width - photoSize - 28 * PX : width;
 
+  /** Lays out the name, title and contact rows from `top` (drawing them when `paint`); returns the bottom. */
+  function header(top, paint) {
+    let hy = top;
+    const put = (s, size, f, opts = {}) => {
+      if (!paint) return;
+      let x = left;
+      if (center) x = left + (textW - doc.getTextWidth(T(s)) - (opts.charSpace || 0) * Math.max(0, T(s).length - 1)) / 2;
+      text(s, x, hy, size, f, opts);
+    };
+    if (m.name) {
+      font('I700', NAME_PT, H.name);
+      for (const ln of wrap(m.name, textW)) {
+        put(ln, NAME_PT, 1.1, { charSpace: -NAME_PT * 0.03 * PT });
+        hy += lh(NAME_PT, 1.1);
+      }
+    }
+    if (m.title) {
+      hy += 6 * PX;
+      font(H.titleItalic ? 'I400i' : 'I500', 11.5, H.title);
+      for (const ln of wrap(m.title, textW)) {
+        put(ln, 11.5);
+        hy += lh(11.5);
+      }
+    }
+    if (m.contact.length) {
+      hy += 12 * PX;
+      const icon = 11 * PX;
+      const iconGap = 6 * PX;
+      const itemGap = 16 * PX;
+      const rowH = lh(9.5);
+      // Group items into rows: wrap when an item doesn't fit; the address always starts its own (bottom) row.
+      font('I400', 9.5, H.contact);
+      const rows = [];
+      let row = null;
+      for (const c of m.contact) {
+        const lines = wrap(c.text, textW - icon - iconGap);
+        const w = icon + iconGap + Math.max(...lines.map((l) => doc.getTextWidth(l)));
+        if (!row || (row.items.length && (c.ownRow || row.w + itemGap + w > textW + 0.01))) {
+          row = { items: [], w: 0, lines: 1 };
+          rows.push(row);
+        }
+        row.w += (row.items.length ? itemGap : 0) + w;
+        row.lines = Math.max(row.lines, lines.length);
+        row.items.push({ ...c, lines, w });
+      }
+      rows.forEach((r, ri) => {
+        if (ri > 0) hy += 4 * PX;
+        let x = center ? left + (textW - r.w) / 2 : left;
+        for (const { type, lines, href, w } of r.items) {
+          if (paint) {
+            if (icons[type]) doc.addImage(icons[type], 'PNG', x, hy + (rowH - icon) / 2, icon, icon);
+            font('I400', 9.5, H.contact);
+            lines.forEach((ln, i) => {
+              text(ln, x + icon + iconGap, hy + i * rowH, 9.5);
+              // Clickable area over the icon and text.
+              if (href) doc.link(i === 0 ? x : x + icon + iconGap, hy + i * rowH, (i === 0 ? icon + iconGap : 0) + doc.getTextWidth(ln), rowH, { url: href });
+            });
+          }
+          x += w + itemGap;
+        }
+        hy += r.lines * rowH;
+      });
+    }
+    return hy;
+  }
+
+  const headTop = y;
+  const textTop = photoAbove ? headTop + photoSize + 14 * PX : headTop;
+  const headBottom = Math.max(header(textTop, false), m.photo ? headTop + photoSize : headTop);
+  const bandPad = 30 * PX;
+
+  // A band design fills the top of the first page behind the header.
+  if (band) {
+    fill(H.band);
+    doc.rect(0, 0, PAGE.w, headBottom + bandPad, 'F');
+  }
   if (m.photo) {
+    const px = photoAbove ? left + (width - photoSize) / 2 : right - photoSize;
     try {
-      doc.addImage(m.photo, 'JPEG', right - photoSize, headTop, photoSize, photoSize);
-      doc.setDrawColor(...RULE);
-      doc.setLineWidth(1 * PX);
-      doc.rect(right - photoSize, headTop, photoSize, photoSize, 'S');
+      doc.addImage(m.photo, 'JPEG', px, headTop, photoSize, photoSize);
+      doc.setDrawColor(...(band ? [255, 255, 255] : RULE));
+      doc.setLineWidth((band ? 2 : 1) * PX);
+      doc.rect(px, headTop, photoSize, photoSize, 'S');
     } catch (err) {
       console.warn('Could not embed photo', err);
     }
   }
+  header(textTop, true);
 
-  if (m.name) {
-    font('I700', NAME_PT, INK);
-    for (const ln of wrap(m.name, textW)) {
-      text(ln, left, y, NAME_PT, 1.1, { charSpace: -NAME_PT * 0.03 * PT });
-      y += lh(NAME_PT, 1.1);
+  if (band) {
+    y = headBottom + bandPad;
+  } else {
+    y = headBottom + 18 * PX;
+    if (H.rule === 'solid') {
+      rule(y, 2 * PX, INK);
+      y += 2 * PX;
+    } else if (H.rule === 'double') {
+      rule(y, 1.5 * PX, INK);
+      y += 1.5 * PX + 2.5 * PX;
+      rule(y, 0.75 * PX, INK);
+      y += 0.75 * PX;
+    } else {
+      y -= 8 * PX; // no rule: the first section's own rule follows
     }
   }
-  if (m.title) {
-    y += 6 * PX;
-    font('I500', 11.5, INK2);
-    for (const ln of wrap(m.title, textW)) {
-      text(ln, left, y, 11.5);
-      y += lh(11.5);
-    }
-  }
-  if (m.contact.length) {
-    y += 12 * PX;
-    const icon = 11 * PX;
-    const iconGap = 6 * PX;
-    const itemGap = 16 * PX;
-    const rowH = lh(9.5);
-    let x = left;
-    font('I400', 9.5, INK2);
-    for (const { type, text: value, href, ownRow } of m.contact) {
-      const lines = wrap(value, textW - icon - iconGap);
-      const w = icon + iconGap + Math.max(...lines.map((l) => doc.getTextWidth(l)));
-      // Wrap when the item doesn't fit; the address always starts its own (bottom) row.
-      if (x > left && (ownRow || x + w > left + textW + 0.01)) {
-        x = left;
-        y += rowH + 4 * PX;
-      }
-      if (icons[type]) doc.addImage(icons[type], 'PNG', x, y + (rowH - icon) / 2, icon, icon);
-      font('I400', 9.5, INK2);
-      lines.forEach((ln, i) => {
-        text(ln, x + icon + iconGap, y + i * rowH, 9.5);
-        // Clickable area over the icon and text.
-        if (href) doc.link(i === 0 ? x : x + icon + iconGap, y + i * rowH, (i === 0 ? icon + iconGap : 0) + doc.getTextWidth(ln), rowH, { url: href });
-      });
-      if (lines.length > 1) {
-        y += (lines.length - 1) * rowH;
-        x = left + textW; // force the next item onto a new row
-      } else {
-        x += w + itemGap;
-      }
-    }
-    y += rowH;
-  }
-
-  y = Math.max(y, m.photo ? headTop + photoSize : y) + 18 * PX;
-  rule(y, 2 * PX, INK);
-  y += 2 * PX;
 
   /**
    * Standard business-letter format (mirrors .paper-letter styles):
@@ -611,14 +723,12 @@ async function createPdf(kind, m, { source, paper } = {}) {
       ensure(e.responsibilities.length || e.accomplishments.length ? 24 : lh(10.5) + lh(10));
       titleRow(e.role, e.dates);
       if (e.meta) paragraph(e.meta, 10);
-      if (e.website || e.reference) {
-        const sep = ' · ';
-        const line = [e.website?.text, e.reference && `Reference: ${e.reference}`].filter(Boolean).join(sep);
+      if (e.website) {
         font('I400', 9.5, INK3);
-        wrap(line, width).forEach((ln, i) => {
+        wrap(e.website.text, width).forEach((ln, i) => {
           ensure(lh(9.5));
           text(ln, left, y, 9.5);
-          if (i === 0 && e.website) {
+          if (i === 0) {
             const w = Math.min(doc.getTextWidth(T(e.website.text)), width);
             doc.link(left, y, w, lh(9.5), { url: e.website.href });
           }
@@ -633,18 +743,6 @@ async function createPdf(kind, m, { source, paper } = {}) {
         level(SUBHEADINGS.accomplishments);
         bullets(e.accomplishments);
       }
-    });
-  }
-
-  /* ---------- seminars & trainings ---------- */
-
-  if (m.trainings.length) {
-    sectionTitle(HEADINGS.trainings, lh(10.5) + lh(10));
-    m.trainings.forEach((t, i) => {
-      if (i > 0) y += 12 * PX;
-      ensure(lh(10.5) + (t.meta ? lh(10) : 0));
-      titleRow(t.name, t.date);
-      if (t.meta) paragraph(t.meta, 10);
     });
   }
 
@@ -673,6 +771,32 @@ async function createPdf(kind, m, { source, paper } = {}) {
         if (c.meta) paragraph(c.meta, 10);
       });
     }
+  }
+
+  /* ---------- seminars & trainings ---------- */
+
+  if (m.trainings.length) {
+    sectionTitle(HEADINGS.trainings, lh(10.5) + lh(10));
+    m.trainings.forEach((t, i) => {
+      if (i > 0) y += 12 * PX;
+      ensure(lh(10.5) + (t.meta ? lh(10) : 0));
+      titleRow(t.name, t.date);
+      if (t.meta) paragraph(t.meta, 10);
+    });
+  }
+
+  /* ---------- references (always last) ---------- */
+
+  if (m.references.length) {
+    const entryH = (r) => lh(10.5) + (r.meta ? lh(10) : 0) + (r.contact ? lh(10) : 0);
+    sectionTitle(HEADINGS.references, entryH(m.references[0]));
+    m.references.forEach((r, i) => {
+      if (i > 0) y += 12 * PX;
+      ensure(entryH(r));
+      titleRow(r.name, '');
+      if (r.meta) paragraph(r.meta, 10);
+      if (r.contact) paragraph(r.contact, 10);
+    });
   }
 
   return doc;

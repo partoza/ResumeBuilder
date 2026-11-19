@@ -4,6 +4,7 @@ import { SECTIONS, blankState } from './data.js';
 import { DEFAULT_FORMAT, LETTER_PART_KEYS, blankLetter, letterHasContent } from './letterData.js';
 import { sectionHasContent } from './utils.js';
 import { DEFAULT_PAPER, PAPERS } from './paper.js';
+import { DEFAULT_DESIGN, RESUME_DESIGNS } from './designs.js';
 
 const KEYS = {
   resume: 'resume-builder:resume:v1',
@@ -75,7 +76,29 @@ export function hydrateResume(saved) {
       base[s.id] = pick(base[s.id], v);
     }
   }
+  if (!Array.isArray(saved.references)) base.references = referencesFromExperience(saved.experience);
   return base;
+}
+
+/**
+ * Older saves kept a reference inside each experience entry ("Name, Position" + contact).
+ * Move those into the separate References section.
+ */
+function referencesFromExperience(experience) {
+  if (!Array.isArray(experience)) return [];
+  const str = (v) => (typeof v === 'string' ? v.trim() : '');
+  return experience.filter(isObj).flatMap((e) => {
+    const full = str(e.referenceName);
+    const contact = str(e.referenceContact);
+    if (!full && !contact) return [];
+    const comma = full.indexOf(',');
+    return [{
+      name: comma > 0 ? full.slice(0, comma).trim() : full,
+      position: comma > 0 ? full.slice(comma + 1).trim() : '',
+      organization: str(e.organization),
+      contact,
+    }];
+  }).slice(0, 50);
 }
 
 /** Copy without React list keys. */
@@ -137,6 +160,7 @@ export function loadUi() {
       resume: PAPERS[saved?.paper?.resume] ? saved.paper.resume : DEFAULT_PAPER,
       letter: PAPERS[saved?.paper?.letter] ? saved.paper.letter : DEFAULT_PAPER,
     },
+    design: RESUME_DESIGNS.some((d) => d.id === saved?.design) ? saved.design : DEFAULT_DESIGN,
   };
 }
 export const saveUi = (ui) => write(KEYS.ui, ui);

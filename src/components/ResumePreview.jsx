@@ -1,6 +1,8 @@
-import { forwardRef } from 'react';
+import { forwardRef, useEffect } from 'react';
 import { Facebook, Github, Globe, Link, Linkedin, Mail, Phone, Pin } from './Icons.jsx';
 import { HEADINGS, SUBHEADINGS } from '../model.js';
+import { designOf, designVars } from '../designs.js';
+import { ensureCssFont, fontByName } from '../fonts.js';
 
 const CONTACT_ICON = { phone: Phone, mail: Mail, pin: Pin, linkedin: Linkedin, facebook: Facebook, github: Github, globe: Globe, link: Link };
 
@@ -21,25 +23,36 @@ function Bullets({ items }) {
   );
 }
 
-function Chips({ label, items, showLabel }) {
+function Chips({ label, items, showLabel, asText }) {
   if (!items.length) return null;
   return (
     <div className="r-skillgrp">
       {showLabel && <div className="r-level">{label}</div>}
-      <div className="r-chips">
-        {items.map((x, i) => <span className="r-chip" key={i}>{x}</span>)}
-      </div>
+      {asText ? (
+        <p className="r-text r-skilltext">{items.join('  ·  ')}</p>
+      ) : (
+        <div className="r-chips">
+          {items.map((x, i) => <span className="r-chip" key={i}>{x}</span>)}
+        </div>
+      )}
     </div>
   );
 }
 
 /** Renders the normalized resume model (see model.js). exportPdf.js draws the same design. */
-const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref) {
+const ResumePreview = forwardRef(function ResumePreview({ model: m, design, style }, ref) {
+  const d = designOf(design);
   const { hard, soft } = m.skills;
+  useEffect(() => { if (d.serif) ensureCssFont(d.serif); }, [d.serif]);
+  const serifCss = d.serif ? fontByName(d.serif)?.css : null;
   const empty = !m.name && !m.contact.length;
 
   return (
-    <article className="paper" ref={ref} style={style}>
+    <article
+      className={`paper design-${d.id}`}
+      ref={ref}
+      style={{ ...designVars(d.id), ...(serifCss ? { fontFamily: serifCss } : null), ...style }}
+    >
       <header className="r-head">
         <div className="r-head-text">
           <h1 className={`r-name${m.name ? '' : ' r-placeholder'}`}>{m.name || 'Your Name'}</h1>
@@ -75,8 +88,8 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
 
       {(hard.length > 0 || soft.length > 0) && (
         <Section title={HEADINGS.skills}>
-          <Chips label={SUBHEADINGS.hard} items={hard} showLabel />
-          <Chips label={SUBHEADINGS.soft} items={soft} showLabel />
+          <Chips label={SUBHEADINGS.hard} items={hard} showLabel asText={d.skills.style === 'text'} />
+          <Chips label={SUBHEADINGS.soft} items={soft} showLabel asText={d.skills.style === 'text'} />
         </Section>
       )}
 
@@ -89,11 +102,9 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
                 <span className="r-date">{e.dates}</span>
               </div>
               {e.meta && <div className="r-sub">{e.meta}</div>}
-              {(e.website || e.reference) && (
+              {e.website && (
                 <div className="r-extra">
-                  {e.website && <a href={e.website.href} target="_blank" rel="noopener noreferrer">{e.website.text}</a>}
-                  {e.website && e.reference && <span className="r-dot"> · </span>}
-                  {e.reference && <span>Reference: {e.reference}</span>}
+                  <a href={e.website.href} target="_blank" rel="noopener noreferrer">{e.website.text}</a>
                 </div>
               )}
               {e.responsibilities.length > 0 && (
@@ -108,20 +119,6 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
                   <Bullets items={e.accomplishments} />
                 </>
               )}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {m.trainings.length > 0 && (
-        <Section title={HEADINGS.trainings}>
-          {m.trainings.map((t, i) => (
-            <div className="r-entry" key={i}>
-              <div className="r-row">
-                <span className="r-strong">{t.name}</span>
-                <span className="r-date">{t.date}</span>
-              </div>
-              {t.meta && <div className="r-sub">{t.meta}</div>}
             </div>
           ))}
         </Section>
@@ -156,6 +153,34 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, style }, ref
               ))}
             </div>
           )}
+        </Section>
+      )}
+
+      {m.trainings.length > 0 && (
+        <Section title={HEADINGS.trainings}>
+          {m.trainings.map((t, i) => (
+            <div className="r-entry" key={i}>
+              <div className="r-row">
+                <span className="r-strong">{t.name}</span>
+                <span className="r-date">{t.date}</span>
+              </div>
+              {t.meta && <div className="r-sub">{t.meta}</div>}
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {m.references.length > 0 && (
+        <Section title={HEADINGS.references}>
+          {m.references.map((r, i) => (
+            <div className="r-entry" key={i}>
+              <div className="r-row">
+                <span className="r-strong">{r.name}</span>
+              </div>
+              {r.meta && <div className="r-sub">{r.meta}</div>}
+              {r.contact && <div className="r-sub">{r.contact}</div>}
+            </div>
+          ))}
         </Section>
       )}
     </article>

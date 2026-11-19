@@ -11,6 +11,7 @@ import { ensureCssFont, isStandardFont } from './fonts.js';
 import { formatRange, mapRichText, parseRich, runsInRange, serializeRich } from './rich.js';
 import { selectionToRanges } from './previewSelection.js';
 import { PAPERS, paperOf, paperPx } from './paper.js';
+import { RESUME_DESIGNS, designOf } from './designs.js';
 
 const ALIGN_BUTTONS = [
   ['left', 'Align left', AlignLeft],
@@ -30,6 +31,7 @@ import {
 } from './storage.js';
 
 const PAPER_OPTIONS = Object.entries(PAPERS).map(([value, p]) => ({ value, label: p.label }));
+const DESIGN_OPTIONS = RESUME_DESIGNS.map((d) => ({ value: d.id, label: d.name }));
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
@@ -114,6 +116,7 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [swap, setSwap] = useState(initialUi.swap);
   const [paper, setPaper] = useState(initialUi.paper); // per document: { resume, letter }
+  const [design, setDesign] = useState(initialUi.design); // resume design (designs.js)
   const [view, setView] = useState('edit'); // mobile only
   const [zoom, setZoom] = useState('fit');
   const [scale, setScale] = useState(1);
@@ -173,7 +176,7 @@ export default function App() {
   const scrollRef = useRef(null);
   const formScrollRef = useRef(null);
 
-  useEffect(() => { saveUi({ docTab, swap, paper }); }, [docTab, swap, paper]);
+  useEffect(() => { saveUi({ docTab, swap, paper, design }); }, [docTab, swap, paper, design]);
 
   const isLetter = docTab === 'letter';
   const docInfo = DOCS[docTab];
@@ -182,6 +185,8 @@ export default function App() {
 
   // One normalized model per document feeds both its preview and its PDF.
   const model = useMemo(() => buildModel(data), [data]);
+  // Re-render the PDF preview when either the content or the design changes.
+  const resumeVersion = useMemo(() => ({ model, design }), [model, design]);
   const letterModel = useMemo(() => buildLetterModel(data.personal, letter), [data.personal, letter]);
   const words = isLetter ? letterWordCount(letterModel) : 0;
 
@@ -448,12 +453,12 @@ export default function App() {
   const stepZoom = (dir) => setZoom(Math.min(1.5, Math.max(0.3, Math.round((scale + dir * 0.1) * 10) / 10)));
 
   /* ---- PDF builders ---- */
-  const buildPdf = () => (isLetter ? createLetterPdf(letterModel, { paper: docPaper }) : createResumePdf(model, { paper: docPaper }));
+  const buildPdf = () => (isLetter ? createLetterPdf(letterModel, { paper: docPaper }) : createResumePdf(model, { paper: docPaper, design }));
   // Download/Print also embed the form data, so "Import PDF" can restore every field later.
   const buildExportPdf = () =>
     isLetter
       ? createLetterPdf(letterModel, { source: letter, paper: docPaper })
-      : createResumePdf(model, { source: stripIds(data), paper: docPaper });
+      : createResumePdf(model, { source: stripIds(data), paper: docPaper, design });
 
   /* ---- print: prints the exact PDF that Download saves ---- */
   const [printing, setPrinting] = useState(false);
@@ -801,6 +806,21 @@ export default function App() {
                 </div>
               </div>
             )}
+            {!isLetter && (
+              <div className="format-bar" role="group" aria-label="Resume design">
+                <span className="design-label" aria-hidden="true">Design</span>
+                <span className="design-pick" title={designOf(design).desc}>
+                  <Select
+                    size="sm"
+                    className="tool-design"
+                    ariaLabel="Resume design"
+                    value={design}
+                    options={DESIGN_OPTIONS}
+                    onChange={setDesign}
+                  />
+                </span>
+              </div>
+            )}
             <div className="toolbar-right">
             <button
               type="button"
@@ -841,7 +861,7 @@ export default function App() {
                 {isLetter ? (
                   <LetterPreview ref={paperRef} model={letterModel} style={paperStyle} />
                 ) : (
-                  <ResumePreview ref={paperRef} model={model} style={paperStyle} />
+                  <ResumePreview ref={paperRef} model={model} design={design} style={paperStyle} />
                 )}
               </div>
             )}
@@ -849,7 +869,7 @@ export default function App() {
               <PdfPages
                 key={docTab}
                 build={buildPdf}
-                version={isLetter ? letterModel : model}
+                version={isLetter ? letterModel : resumeVersion}
                 paper={docPaper}
                 width={PAPER_W * scale}
                 maxPages={docInfo.max}

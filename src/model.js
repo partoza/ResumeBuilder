@@ -17,7 +17,6 @@ export function buildModel(d) {
       meta: [e.organization, e.location, experienceLabel(e)].filter(has).map((x) => x.trim()).join(' | '),
       dates: range(e.start, e.current ? 'Present' : e.end),
       website: toLink(e.website),
-      reference: [e.referenceName, e.referenceContact].filter(has).map((x) => x.trim()).join(', '),
       responsibilities: splitItems(e.responsibilities),
       accomplishments: splitItems(e.accomplishments),
     }));
@@ -47,6 +46,14 @@ export function buildModel(d) {
       date: c.date.trim(),
     }));
 
+  const references = (d.references || [])
+    .filter((r) => has(r.name))
+    .map((r) => ({
+      name: r.name.trim(),
+      meta: [r.position, r.organization].filter(has).map((x) => x.trim()).join(' | '),
+      contact: (r.contact || '').trim(),
+    }));
+
   return {
     name: fullName(p),
     title: (p.title || '').trim(),
@@ -65,6 +72,7 @@ export function buildModel(d) {
     trainings,
     education,
     credentials,
+    references,
   };
 }
 
@@ -75,6 +83,7 @@ export const HEADINGS = {
   experience: 'Experience',
   trainings: 'Seminars & Trainings',
   education: 'Education & Credentials',
+  references: 'References',
 };
 
 export const SUBHEADINGS = {

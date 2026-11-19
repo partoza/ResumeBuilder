@@ -450,6 +450,57 @@ button { font: inherit; color: inherit; }
 
 .r-placeholder { color: #a1a1aa; }
 
+/* ---- Resume designs (designs.js sets the --d-* colors; exportPdf.js draws the same) ---- */
+.paper[class*="design-"] .r-name { color: var(--d-name); }
+.paper[class*="design-"] .r-role { color: var(--d-title); }
+.paper[class*="design-"] .r-contact { color: var(--d-contact); }
+.paper[class*="design-"] .r-contact svg { color: var(--d-icon); }
+.paper[class*="design-"] .r-sec-title { color: var(--d-sec); border-bottom-color: var(--d-sec-rule); }
+.paper[class*="design-"] .r-chip { background: var(--d-chip-bg); border-color: var(--d-chip-border); color: var(--d-chip-text); }
+.paper[class*="design-"] .r-bullets li::marker { color: var(--d-bullet); }
+.r-skilltext { font-size: 10pt; }
+
+/* Band header (Modern, Bold): a full-width color block at the top of the page. */
+.paper.design-modern .r-head,
+.paper.design-bold .r-head {
+  background: var(--d-band); border-bottom: 0;
+  margin: -52px -56px 0; padding: 52px 56px 30px;
+}
+.paper.design-modern .r-photo,
+.paper.design-bold .r-photo { border: 2px solid #fff; }
+.paper.design-modern .r-placeholder,
+.paper.design-bold .r-placeholder { color: rgb(255 255 255 / 0.55); }
+
+/* Elegant: centered header (photo above the name), double rule, centered section titles. */
+.paper.design-elegant .r-head {
+  flex-direction: column-reverse; align-items: center; text-align: center; gap: 14px;
+  border-bottom: 1.5px solid var(--ink); box-shadow: 0 2.5px 0 #fff, 0 3.25px 0 var(--ink);
+}
+.paper.design-elegant .r-role { font-weight: 400; font-style: italic; }
+.paper.design-elegant .r-contact { justify-content: center; }
+.paper.design-elegant .r-sec-title {
+  display: flex; align-items: center; gap: 10px; border-bottom: 0; padding-bottom: 0;
+}
+.paper.design-elegant .r-sec-title::before,
+.paper.design-elegant .r-sec-title::after { content: ""; flex: 1; height: 0.75px; background: var(--d-sec-rule); }
+
+/* Minimal: no header rule; headings with a short accent underline. */
+.paper.design-minimal .r-head { border-bottom: 0; padding-bottom: 10px; }
+.paper.design-minimal .r-sec-title { border-bottom: 0; padding-bottom: 0; margin-bottom: 9px; }
+.paper.design-minimal .r-sec-title::after {
+  content: ""; display: block; width: 28px; height: 2px; margin-top: 4px; background: var(--d-sec-rule);
+}
+
+/* Bold: tinted heading bar with an accent block; square bullets. */
+.paper.design-bold .r-sec-title {
+  background: var(--d-sec-bar); border-bottom: 0; border-left: 3.5px solid var(--d-sec-rule);
+  padding: 4px 0 4px 8.5px;
+}
+.paper.design-bold .r-bullets { list-style: square; }
+
+.design-label { font-size: 12px; font-weight: 500; color: var(--fg-muted); }
+.select-trigger.tool-design { width: 104px; }
+
 /* Cover letter — standard business format, mirrors drawLetter() in exportPdf.js:
    1in margins, Times New Roman 12pt, single-spaced (1.15), one blank line between parts,
    two above the salutation and the close, three blank lines for the signature. */

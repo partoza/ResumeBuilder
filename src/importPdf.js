@@ -278,7 +278,9 @@ const HEADING_WORDS = {
     'licensure', 'eligibility', 'civil service eligibility', 'credentials'],
   trainings: ['seminars', 'trainings', 'seminars and trainings', 'trainings and seminars', 'seminars and trainings attended',
     'trainings attended', 'seminars attended', 'seminars and workshops', 'workshops', 'trainings and workshops'],
-  ignore: ['references', 'reference', 'character references', 'personal information', 'personal data', 'personal details',
+  references: ['references', 'reference', 'character references', 'character reference', 'professional references',
+    'references available upon request'],
+  ignore: ['personal information', 'personal data', 'personal details',
     'personal background', 'interests', 'hobbies', 'languages', 'awards', 'affiliations', 'organizations', 'declaration'],
 };
 const headingKey = (s) => String(s).toLowerCase().replace(/&/g, 'and').replace(/[^a-z]/g, '');
@@ -406,12 +408,48 @@ function takeEntryDate(text) {
   return null;
 }
 
-function splitReference(text) {
+/** "Name, Position, 0918 765 4321" (an old in-experience reference line) → a References entry. */
+function splitReference(text, organization = '') {
   const contact = PHONE_RE.exec(text) || EMAIL_RE.exec(text);
-  return {
-    referenceName: stripPunct(contact ? text.replace(contact[0], '') : text),
-    referenceContact: contact ? clean(contact[0]) : '',
+  const rest = stripPunct(clean(contact ? text.replace(contact[0], ' ') : text));
+  const [name = '', ...position] = rest.split(/\s*,\s*/);
+  return { name, position: position.join(', '), organization, contact: contact ? clean(contact[0]) : '' };
+}
+
+const CONTACT_LABEL_RE = /^(contact(\s*(no\.?|number|#))?|cell(phone)?|mobile(\s*no\.?)?|phone|tel\.?|email|e-mail)\s*:?\s*/i;
+
+/**
+ * References: a name line, then "Position | Organization" (or one line each), then a contact line.
+ * A one-line entry ("Name, Position, Company, 0918…") is split on commas.
+ */
+function parseReferences(lines) {
+  const entries = [];
+  let cur = null;
+  const start = () => { cur = { name: '', position: '', organization: '', contact: '' }; entries.push(cur); };
+  const fill = (parts) => {
+    for (const p of parts) {
+      if (!cur.name) cur.name = p;
+      else if (!cur.position) cur.position = p;
+      else if (!cur.organization) cur.organization = p;
+      else cur.organization += `, ${p}`;
+    }
   };
+  for (const l of lines) {
+    const t = clean(l.text.replace(BULLET_RE, ''));
+    if (!t || /available (up)?on request/i.test(t)) continue;
+    const contact = PHONE_RE.exec(t) || EMAIL_RE.exec(t);
+    const rest = stripPunct(clean((contact ? t.replace(contact[0], ' ') : t).replace(CONTACT_LABEL_RE, '')));
+    const parts = rest.split(/\s*[|·]\s*|\s*,\s*/).map(clean).filter(Boolean);
+    // New entry: the first line, a bullet, anything after a contact line, a full line with its
+    // own name and contact, or a plain line once name, position and organization are all set.
+    const fresh = !cur || BULLET_RE.test(l.text) || cur.contact
+      || (contact && parts.length > 1 && cur.name)
+      || (!contact && cur.name && cur.position && cur.organization);
+    if (fresh) start();
+    fill(parts);
+    if (contact) cur.contact = clean(contact[0]);
+  }
+  return entries.filter((e) => e.name);
 }
 
 function experienceType(text) {
@@ -427,7 +465,7 @@ function experienceType(text) {
  * responsibilities, or accomplishments when they contain a number (unless the
  * PDF labels them explicitly).
  */
-function parseExperience(lines) {
+function parseExperience(lines, refs = []) {
   const entries = [];
   let cur = null;
   let bucket = null;
@@ -453,7 +491,7 @@ function parseExperience(lines) {
       const title = range.rest.split('\t')[0] || takeTitleBefore();
       cur = {
         type: EXPERIENCE_TYPES[0], typeOther: '', role: title, organization: '', location: '', website: '',
-        referenceName: '', referenceContact: '', start: range.start, end: range.end, current: range.current, _lines: [],
+        start: range.start, end: range.end, current: range.current, _lines: [],
       };
       bucket = null;
       entries.push(cur);
@@ -461,12 +499,12 @@ function parseExperience(lines) {
     }
     if (!cur) { pending.push(l); continue; }
 
-    if (/^reference\s*:/i.test(plain)) { Object.assign(cur, splitReference(plain.replace(/^reference\s*:\s*/i, ''))); continue; }
+    if (/^reference\s*:/i.test(plain)) { cur._ref = plain.replace(/^reference\s*:\s*/i, ''); continue; }
     const url = URL_RE.exec(plain);
     if (url && !cur.website && !cur._lines.length && plain.length < 120 && !BULLET_RE.test(l.text)) {
       cur.website = url[0];
       const ref = /reference\s*:\s*(.+)$/i.exec(plain);
-      if (ref) Object.assign(cur, splitReference(ref[1]));
+      if (ref) cur._ref = ref[1];
       continue;
     }
     if (!BULLET_RE.test(l.text) && !cur.organization && !cur._lines.length && bucket === null) {
@@ -496,7 +534,9 @@ function parseExperience(lines) {
     const acc = [...toItems(by('accomplishments')), ...(labelled ? [] : auto.filter((s) => /\d/.test(s)))];
     e.responsibilities = resp.join('\n');
     e.accomplishments = acc.join('\n');
+    if (e._ref) refs.push(splitReference(e._ref, e.organization));
     delete e._lines;
+    delete e._ref;
   }
   return entries;
 }
@@ -644,11 +684,12 @@ export function parseResume(lines) {
     hard = hard.filter((s) => !isSoftSkill(s));
   }
 
+  const oldRefs = []; // "Reference: …" lines inside experience entries (older PDFs from this app)
   return {
     personal: parseHeader(sections.header || []),
     summary: { text: clean((sections.summary || []).map((l) => l.text).join(' ')) },
     skills: { hard: hard.join(', '), soft: soft.join(', ') },
-    experience: parseExperience(sections.experience || []),
+    experience: parseExperience(sections.experience || [], oldRefs),
     education: parseEducation(sections.education || []),
     // Seminars & trainings read like certifications: "Title ⇥ Date", then "Organizer | Venue".
     trainings: parseCredentials(sections.trainings || []).map(({ name, issuer, date }) => {
@@ -656,6 +697,7 @@ export function parseResume(lines) {
       return { name, organizer, location: venue.join(', '), date };
     }),
     credentials: parseCredentials(sections.credentials || []),
+    references: [...parseReferences(sections.references || []), ...oldRefs].filter((r) => r.name),
   };
 }
 

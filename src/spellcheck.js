@@ -113,8 +113,9 @@ export function documentText(kind, data, letter) {
   const names = [p.firstName, p.middleName, p.lastName, p.suffix, p.address, p.email, p.link];
   for (const e of data.experience) {
     prose.push(e.role, e.typeOther, e.responsibilities, e.accomplishments);
-    names.push(e.organization, e.location, e.website, e.referenceName, e.referenceContact);
+    names.push(e.organization, e.location, e.website);
   }
+  for (const r of data.references || []) names.push(r.name, r.position, r.organization, r.contact);
   for (const t of data.trainings || []) {
     prose.push(t.name);
     names.push(t.organizer, t.location);
