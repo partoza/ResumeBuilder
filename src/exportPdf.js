@@ -318,13 +318,38 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
     y += lh(8.5) + 1 * PX;
   }
 
-  function paragraph(s, size = 10.5, color = INK2, name = 'I400') {
-    font(name, size, color);
-    for (const ln of wrap(s, width)) {
-      ensure(lh(size));
-      text(ln, left, y, size);
-      y += lh(size);
+  /**
+   * One wrapped line spread across `w` (justified), word by word with the current font.
+   * Lines whose gaps would get too wide (or too tight) stay left-aligned, so a PDF reader
+   * still sees ordinary word spaces and the text extracts cleanly.
+   */
+  function justifiedLine(ln, x, top, size, w) {
+    const words = ln.trim().split(/ +/);
+    const space = doc.getTextWidth(' ');
+    const total = words.reduce((sum, wd) => sum + doc.getTextWidth(wd), 0);
+    const gap = words.length > 1 ? (w - total) / (words.length - 1) : 0;
+    if (words.length < 2 || gap > space * 3.2 || gap < space * 0.6) {
+      text(ln, x, top, size);
+      return;
     }
+    let cx = x;
+    for (const wd of words) {
+      text(wd, cx, top, size);
+      cx += doc.getTextWidth(wd) + gap;
+    }
+  }
+
+  /** Wrapped text; `justify` spreads every line but the last across the column. */
+  function paragraph(s, size = 10.5, color = INK2, name = 'I400', justify = false) {
+    font(name, size, color);
+    const lines = wrap(s, width);
+    lines.forEach((ln, i) => {
+      ensure(lh(size));
+      font(name, size, color);
+      if (justify && i < lines.length - 1) justifiedLine(ln, left, y, size, width);
+      else text(ln, left, y, size);
+      y += lh(size);
+    });
   }
 
   function bullets(items) {
@@ -344,7 +369,9 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
       lines.forEach((ln, j) => {
         if (j > 0) ensure(lh(10.5));
         font('I400', 10.5, INK2);
-        text(ln, left + indent, y, 10.5);
+        // Justified, like the summary (the item's last line stays left-aligned).
+        if (j < lines.length - 1) justifiedLine(ln, left + indent, y, 10.5, width - indent);
+        else text(ln, left + indent, y, 10.5);
         y += lh(10.5);
       });
     });
@@ -838,7 +865,7 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
     summary() {
       if (!m.summary) return;
       sectionTitle(HEADINGS.summary, lh(10.5) * 2);
-      paragraph(m.summary);
+      paragraph(m.summary, 10.5, INK2, 'I400', true);
     },
 
     skills() {
