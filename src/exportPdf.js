@@ -206,11 +206,28 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
     creator: 'Resume Builder',
   });
 
-  const left = PAGE.mx;
-  const right = PAGE.w - PAGE.mx;
-  const width = right - left;
+  // The drawing helpers work inside a column (left…right); two-column layouts move it.
+  let left = PAGE.mx;
+  let right = PAGE.w - PAGE.mx;
+  let width = right - left;
   const bottom = PAGE.h - PAGE.mb;
   let y = PAGE.mt;
+  const column = (l, r) => {
+    left = l;
+    right = r;
+    width = r - l;
+  };
+  const pageNo = () => doc.getCurrentPageInfo().pageNumber;
+  // Layouts that paint page furniture (the sidebar's background) hook in here.
+  let onEnterPage = null;
+  /** Continue on the next page — an existing one when another column already made it. */
+  const nextPage = () => {
+    const n = pageNo();
+    if (n < doc.getNumberOfPages()) doc.setPage(n + 1);
+    else doc.addPage();
+    y = PAGE.mt;
+    onEnterPage?.(n + 1);
+  };
 
   const font = (name, size, color = INK) => {
     if (SERIF_FACE) doc.setFont(SERIF_FACE[name], 'normal');
@@ -234,10 +251,7 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
     doc.rect(left, yy, width, h, 'F');
   };
   const ensure = (h) => {
-    if (y + h > bottom + 0.01) {
-      doc.addPage();
-      y = PAGE.mt;
-    }
+    if (y + h > bottom + 0.01) nextPage();
   };
 
   /* ---------- building blocks ---------- */
@@ -367,8 +381,89 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
     y += h;
   }
 
-  /** Bold title left, muted date right, sharing a baseline. */
+  const NARROW = 80; // mm — columns narrower than this put entry dates under the title
+
+  // Timeline layout: dates sit in a rail left of the entries, beside a line with a dot per entry.
+  const RAIL_W = 100 * PX; // rail width (entries start after it)
+  const RAIL_DATE_W = 70 * PX;
+  const RAIL_X = PAGE.mx + 84 * PX; // the line
+  let rail = false; // drawing rail entries right now
+  let railMark = null; // where the current entry's title row started: { page, y }
+
+  /** Title in the entry column, date wrapped in the rail. */
+  function railTitleRow(title, date) {
+    font('I600', 10.5, INK);
+    const lines = wrap(title, width);
+    font('I400', 9, INK3);
+    const dateLines = date ? wrap(date, RAIL_DATE_W) : [];
+    ensure(Math.max(lh(10.5) * lines.length, lh(9) * dateLines.length));
+    railMark = { page: pageNo(), y };
+    dateLines.forEach((ln, i) => {
+      font('I400', 9, INK3);
+      text(ln, PAGE.mx, y + baseline(10.5) - baseline(9) + i * lh(9), 9);
+    });
+    lines.forEach((ln) => {
+      font('I600', 10.5, INK);
+      text(ln, left, y, 10.5);
+      y += lh(10.5);
+    });
+  }
+
+  /** Draw a list of dated entries; on the Timeline layout they get the rail, line and dots. */
+  function railEntries(items, drawOne) {
+    if (D.layout !== 'timeline') {
+      items.forEach(drawOne);
+      return;
+    }
+    const outer = [left, right];
+    column(PAGE.mx + RAIL_W, outer[1]);
+    rail = true;
+    const R = D.rail;
+    items.forEach((it, i) => {
+      railMark = null;
+      drawOne(it, i);
+      if (!railMark) return;
+      const last = i === items.length - 1;
+      const dotY = railMark.y + baseline(10.5) - 10.5 * 0.33 * PT;
+      // The line runs from this dot to just under the next one (a page break splits it).
+      const end = { page: pageNo(), y: last ? y : y + 12 * PX + 2 };
+      for (let pg = railMark.page; pg <= end.page; pg++) {
+        doc.setPage(pg);
+        const top = pg === railMark.page ? dotY : PAGE.mt;
+        const bot = pg === end.page ? end.y : bottom;
+        if (bot > top) {
+          fill(R.line);
+          doc.rect(RAIL_X - 0.75 * PX, top, 1.5 * PX, bot - top, 'F');
+        }
+      }
+      doc.setPage(railMark.page);
+      doc.setFillColor(255, 255, 255);
+      doc.circle(RAIL_X, dotY, 1.55, 'F');
+      fill(R.dot);
+      doc.circle(RAIL_X, dotY, 1.05, 'F');
+      doc.setPage(end.page);
+    });
+    rail = false;
+    column(...outer);
+  }
+
+  /** Bold title left, muted date right, sharing a baseline (in a narrow column, the date goes under the title). */
   function titleRow(title, date) {
+    if (rail) return railTitleRow(title, date);
+    if (date && width < NARROW) {
+      font('I600', 10.5, INK);
+      const lines = wrap(title, width);
+      ensure(lh(10.5) * lines.length + lh(9.5));
+      lines.forEach((ln) => {
+        font('I600', 10.5, INK);
+        text(ln, left, y, 10.5);
+        y += lh(10.5);
+      });
+      font('I400', 9.5, INK3);
+      text(date, left, y, 9.5);
+      y += lh(9.5);
+      return;
+    }
     font('I400', 9.5, INK3);
     const dateW = date ? doc.getTextWidth(T(date)) : 0;
     font('I600', 10.5, INK);
@@ -394,116 +489,158 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
   /* ---------- header ---------- */
 
   const H = D.header;
-  const band = H.style === 'band';
-  const center = H.align === 'center';
-  const photoSize = 1.5 * 25.4; // 1.5in, like the preview
-  const photoAbove = center && !!m.photo; // a centered header puts the photo above the name
-  const textW = m.photo && !photoAbove ? width - photoSize - 28 * PX : width;
 
-  /** Lays out the name, title and contact rows from `top` (drawing them when `paint`); returns the bottom. */
-  function header(top, paint) {
-    let hy = top;
-    const put = (s, size, f, opts = {}) => {
-      if (!paint) return;
-      let x = left;
-      if (center) x = left + (textW - doc.getTextWidth(T(s)) - (opts.charSpace || 0) * Math.max(0, T(s).length - 1)) / 2;
-      text(s, x, hy, size, f, opts);
-    };
-    if (m.name) {
-      font('I700', NAME_PT, H.name);
-      for (const ln of wrap(m.name, textW)) {
-        put(ln, NAME_PT, 1.1, { charSpace: -NAME_PT * 0.03 * PT });
-        hy += lh(NAME_PT, 1.1);
-      }
-    }
-    if (m.title) {
-      hy += 6 * PX;
-      font(H.titleItalic ? 'I400i' : 'I500', 11.5, H.title);
-      for (const ln of wrap(m.title, textW)) {
-        put(ln, 11.5);
-        hy += lh(11.5);
-      }
-    }
-    if (m.contact.length) {
-      hy += 12 * PX;
-      const icon = 11 * PX;
-      const iconGap = 6 * PX;
-      const itemGap = 16 * PX;
-      const rowH = lh(9.5);
-      // Group items into rows: wrap when an item doesn't fit; the address always starts its own (bottom) row.
-      font('I400', 9.5, H.contact);
-      const rows = [];
-      let row = null;
-      for (const c of m.contact) {
-        const lines = wrap(c.text, textW - icon - iconGap);
-        const w = icon + iconGap + Math.max(...lines.map((l) => doc.getTextWidth(l)));
-        if (!row || (row.items.length && (c.ownRow || row.w + itemGap + w > textW + 0.01))) {
-          row = { items: [], w: 0, lines: 1 };
-          rows.push(row);
+  /**
+   * Name, title and contact rows (+ photo) across the current column, then the design's rule.
+   * The Sidebar layout leaves out the photo and contact (they go in its side column).
+   */
+  function drawHeader({ withPhoto = true, withContact = true } = {}) {
+    const band = H.style === 'band';
+    const center = H.align === 'center';
+    const photo = withPhoto ? m.photo : '';
+    const photoSize = 1.5 * 25.4; // 1.5in, like the preview
+    const photoAbove = center && !!photo; // a centered header puts the photo above the name
+    const textW = photo && !photoAbove ? width - photoSize - 28 * PX : width;
+
+    /** Lays out the name, title and contact rows from `top` (drawing them when `paint`); returns the bottom. */
+    function header(top, paint) {
+      let hy = top;
+      const put = (s, size, f, opts = {}) => {
+        if (!paint) return;
+        let x = left;
+        if (center) x = left + (textW - doc.getTextWidth(T(s)) - (opts.charSpace || 0) * Math.max(0, T(s).length - 1)) / 2;
+        text(s, x, hy, size, f, opts);
+      };
+      if (m.name) {
+        font('I700', NAME_PT, H.name);
+        for (const ln of wrap(m.name, textW)) {
+          put(ln, NAME_PT, 1.1, { charSpace: -NAME_PT * 0.03 * PT });
+          hy += lh(NAME_PT, 1.1);
         }
-        row.w += (row.items.length ? itemGap : 0) + w;
-        row.lines = Math.max(row.lines, lines.length);
-        row.items.push({ ...c, lines, w });
       }
-      rows.forEach((r, ri) => {
-        if (ri > 0) hy += 4 * PX;
-        let x = center ? left + (textW - r.w) / 2 : left;
-        for (const { type, lines, href, w } of r.items) {
-          if (paint) {
-            if (icons[type]) doc.addImage(icons[type], 'PNG', x, hy + (rowH - icon) / 2, icon, icon);
-            font('I400', 9.5, H.contact);
-            lines.forEach((ln, i) => {
-              text(ln, x + icon + iconGap, hy + i * rowH, 9.5);
-              // Clickable area over the icon and text.
-              if (href) doc.link(i === 0 ? x : x + icon + iconGap, hy + i * rowH, (i === 0 ? icon + iconGap : 0) + doc.getTextWidth(ln), rowH, { url: href });
-            });
+      if (m.title) {
+        hy += 6 * PX;
+        font(H.titleItalic ? 'I400i' : 'I500', 11.5, H.title);
+        for (const ln of wrap(m.title, textW)) {
+          put(ln, 11.5);
+          hy += lh(11.5);
+        }
+      }
+      if (withContact && m.contact.length) {
+        hy += 12 * PX;
+        const icon = 11 * PX;
+        const iconGap = 6 * PX;
+        const itemGap = 16 * PX;
+        const rowH = lh(9.5);
+        // Group items into rows: wrap when an item doesn't fit; the address always starts its own (bottom) row.
+        font('I400', 9.5, H.contact);
+        const rows = [];
+        let row = null;
+        for (const c of m.contact) {
+          const lines = wrap(c.text, textW - icon - iconGap);
+          const w = icon + iconGap + Math.max(...lines.map((l) => doc.getTextWidth(l)));
+          if (!row || (row.items.length && (c.ownRow || row.w + itemGap + w > textW + 0.01))) {
+            row = { items: [], w: 0, lines: 1 };
+            rows.push(row);
           }
-          x += w + itemGap;
+          row.w += (row.items.length ? itemGap : 0) + w;
+          row.lines = Math.max(row.lines, lines.length);
+          row.items.push({ ...c, lines, w });
         }
-        hy += r.lines * rowH;
-      });
+        rows.forEach((r, ri) => {
+          if (ri > 0) hy += 4 * PX;
+          let x = center ? left + (textW - r.w) / 2 : left;
+          for (const { type, lines, href, w } of r.items) {
+            if (paint) {
+              if (icons[type]) doc.addImage(icons[type], 'PNG', x, hy + (rowH - icon) / 2, icon, icon);
+              font('I400', 9.5, H.contact);
+              lines.forEach((ln, i) => {
+                text(ln, x + icon + iconGap, hy + i * rowH, 9.5);
+                // Clickable area over the icon and text.
+                if (href) doc.link(i === 0 ? x : x + icon + iconGap, hy + i * rowH, (i === 0 ? icon + iconGap : 0) + doc.getTextWidth(ln), rowH, { url: href });
+              });
+            }
+            x += w + itemGap;
+          }
+          hy += r.lines * rowH;
+        });
+      }
+      return hy;
     }
-    return hy;
+
+    const headTop = y;
+    const textTop = photoAbove ? headTop + photoSize + 14 * PX : headTop;
+    const headBottom = Math.max(header(textTop, false), photo ? headTop + photoSize : headTop);
+    const bandPad = 30 * PX;
+
+    // A band design fills the top of the first page behind the header.
+    if (band) {
+      fill(H.band);
+      doc.rect(0, 0, PAGE.w, headBottom + bandPad, 'F');
+    }
+    if (photo) {
+      const px = photoAbove ? left + (width - photoSize) / 2 : right - photoSize;
+      drawPhoto(px, headTop, photoSize, band);
+    }
+    header(textTop, true);
+
+    if (band) {
+      y = headBottom + bandPad;
+    } else {
+      y = headBottom + 18 * PX;
+      const color = H.ruleColor || INK;
+      if (H.rule === 'solid') {
+        rule(y, 2 * PX, color);
+        y += 2 * PX;
+      } else if (H.rule === 'double') {
+        rule(y, 1.5 * PX, color);
+        y += 1.5 * PX + 2.5 * PX;
+        rule(y, 0.75 * PX, color);
+        y += 0.75 * PX;
+      } else {
+        y -= 8 * PX; // no rule: the first section's own rule follows
+      }
+    }
   }
 
-  const headTop = y;
-  const textTop = photoAbove ? headTop + photoSize + 14 * PX : headTop;
-  const headBottom = Math.max(header(textTop, false), m.photo ? headTop + photoSize : headTop);
-  const bandPad = 30 * PX;
-
-  // A band design fills the top of the first page behind the header.
-  if (band) {
-    fill(H.band);
-    doc.rect(0, 0, PAGE.w, headBottom + bandPad, 'F');
-  }
-  if (m.photo) {
-    const px = photoAbove ? left + (width - photoSize) / 2 : right - photoSize;
+  function drawPhoto(x, top, size, onColor) {
     try {
-      doc.addImage(m.photo, 'JPEG', px, headTop, photoSize, photoSize);
-      doc.setDrawColor(...(band ? [255, 255, 255] : RULE));
-      doc.setLineWidth((band ? 2 : 1) * PX);
-      doc.rect(px, headTop, photoSize, photoSize, 'S');
+      doc.addImage(m.photo, 'JPEG', x, top, size, size);
+      doc.setDrawColor(...(onColor ? [255, 255, 255] : RULE));
+      doc.setLineWidth((onColor ? 2 : 1) * PX);
+      doc.rect(x, top, size, size, 'S');
     } catch (err) {
       console.warn('Could not embed photo', err);
     }
   }
-  header(textTop, true);
 
-  if (band) {
-    y = headBottom + bandPad;
-  } else {
-    y = headBottom + 18 * PX;
-    if (H.rule === 'solid') {
-      rule(y, 2 * PX, INK);
-      y += 2 * PX;
-    } else if (H.rule === 'double') {
-      rule(y, 1.5 * PX, INK);
-      y += 1.5 * PX + 2.5 * PX;
-      rule(y, 0.75 * PX, INK);
-      y += 0.75 * PX;
+  /** Sidebar layout: photo and contact details stacked in the side column. */
+  function drawSideContact() {
+    if (m.photo) {
+      const size = Math.min(width, 1.5 * 25.4);
+      drawPhoto(left + (width - size) / 2, y, size, true);
+      y += size;
     } else {
-      y -= 8 * PX; // no rule: the first section's own rule follows
+      y -= 20 * PX; // let the first heading start at the top margin
     }
+    if (!m.contact.length) return;
+    sectionTitle('Contact', lh(9.5));
+    const icon = 11 * PX;
+    const iconGap = 6 * PX;
+    const rowH = lh(9.5);
+    m.contact.forEach(({ type, text: value, href }, i) => {
+      if (i > 0) y += 5 * PX;
+      font('I400', 9.5, H.contact);
+      const lines = wrap(value, width - icon - iconGap);
+      ensure(rowH * lines.length);
+      if (icons[type]) doc.addImage(icons[type], 'PNG', left, y + (rowH - icon) / 2, icon, icon);
+      lines.forEach((ln, j) => {
+        font('I400', 9.5, H.contact);
+        text(ln, left + icon + iconGap, y + j * rowH, 9.5);
+        if (href) doc.link(j === 0 ? left : left + icon + iconGap, y + j * rowH, (j === 0 ? icon + iconGap : 0) + doc.getTextWidth(ln), rowH, { url: href });
+      });
+      y += rowH * lines.length;
+    });
   }
 
   /**
@@ -688,115 +825,179 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
     part(['enclosure']);
   }
 
-  /* ---------- summary ---------- */
+  /* ---------- sections (each a block a layout can place in any column) ---------- */
 
-  if (m.summary) {
-    sectionTitle(HEADINGS.summary, lh(10.5) * 2);
-    paragraph(m.summary);
-  }
+  const BLOCKS = {
+    summary() {
+      if (!m.summary) return;
+      sectionTitle(HEADINGS.summary, lh(10.5) * 2);
+      paragraph(m.summary);
+    },
 
-  /* ---------- skills ---------- */
+    skills() {
+      const { hard, soft } = m.skills;
+      if (!hard.length && !soft.length) return;
+      sectionTitle(HEADINGS.skills, 25 * PX);
+      // Both groups are always labelled, so the PDF says which skills are which
+      // (and imports back into the right fields).
+      if (hard.length) {
+        level(SUBHEADINGS.hard, 0);
+        y += 3 * PX;
+        chips(hard);
+      }
+      if (soft.length) {
+        level(SUBHEADINGS.soft, hard.length ? 8 * PX : 0);
+        y += 3 * PX;
+        chips(soft);
+      }
+    },
 
-  const { hard, soft } = m.skills;
-  if (hard.length || soft.length) {
-    sectionTitle(HEADINGS.skills, 25 * PX);
-    // Both groups are always labelled, so the PDF says which skills are which
-    // (and imports back into the right fields).
-    if (hard.length) {
-      level(SUBHEADINGS.hard, 0);
-      y += 3 * PX;
-      chips(hard);
-    }
-    if (soft.length) {
-      level(SUBHEADINGS.soft, hard.length ? 8 * PX : 0);
-      y += 3 * PX;
-      chips(soft);
-    }
-  }
+    experience() {
+      if (!m.experience.length) return;
+      sectionTitle(HEADINGS.experience, 22);
+      railEntries(m.experience, (e, i) => {
+        if (i > 0) y += 12 * PX;
+        ensure(e.responsibilities.length || e.accomplishments.length ? 24 : lh(10.5) + lh(10));
+        titleRow(e.role, e.dates);
+        if (e.meta) paragraph(e.meta, 10);
+        if (e.website) {
+          font('I400', 9.5, INK3);
+          wrap(e.website.text, width).forEach((ln, j) => {
+            ensure(lh(9.5));
+            text(ln, left, y, 9.5);
+            if (j === 0) {
+              const w = Math.min(doc.getTextWidth(T(e.website.text)), width);
+              doc.link(left, y, w, lh(9.5), { url: e.website.href });
+            }
+            y += lh(9.5);
+          });
+        }
+        if (e.responsibilities.length) {
+          level(SUBHEADINGS.responsibilities);
+          bullets(e.responsibilities);
+        }
+        if (e.accomplishments.length) {
+          level(SUBHEADINGS.accomplishments);
+          bullets(e.accomplishments);
+        }
+      });
+    },
 
-  /* ---------- experience ---------- */
-
-  if (m.experience.length) {
-    sectionTitle(HEADINGS.experience, 22);
-    m.experience.forEach((e, i) => {
-      if (i > 0) y += 12 * PX;
-      ensure(e.responsibilities.length || e.accomplishments.length ? 24 : lh(10.5) + lh(10));
-      titleRow(e.role, e.dates);
-      if (e.meta) paragraph(e.meta, 10);
-      if (e.website) {
-        font('I400', 9.5, INK3);
-        wrap(e.website.text, width).forEach((ln, i) => {
-          ensure(lh(9.5));
-          text(ln, left, y, 9.5);
-          if (i === 0) {
-            const w = Math.min(doc.getTextWidth(T(e.website.text)), width);
-            doc.link(left, y, w, lh(9.5), { url: e.website.href });
-          }
-          y += lh(9.5);
+    education() {
+      if (!m.education.length && !m.credentials.length) return;
+      sectionTitle(HEADINGS.education, 12);
+      if (m.education.length && m.credentials.length) level(SUBHEADINGS.education, 0);
+      railEntries(m.education, (e, i) => {
+        if (i > 0) y += 12 * PX;
+        ensure(lh(10.5) + lh(10) * 2);
+        titleRow(e.degree, e.date);
+        if (e.institution) paragraph(e.institution, 10);
+        if (e.honors) {
+          y += 1 * PX;
+          paragraph(e.honors, 9.5, INK2, 'I400i');
+        }
+      });
+      if (m.credentials.length) {
+        if (m.education.length) y += 14 * PX;
+        level(SUBHEADINGS.credentials, 0);
+        railEntries(m.credentials, (c, i) => {
+          if (i > 0) y += 12 * PX;
+          ensure(lh(10.5) + lh(10));
+          titleRow(c.name, c.date);
+          if (c.meta) paragraph(c.meta, 10);
         });
       }
-      if (e.responsibilities.length) {
-        level(SUBHEADINGS.responsibilities);
-        bullets(e.responsibilities);
-      }
-      if (e.accomplishments.length) {
-        level(SUBHEADINGS.accomplishments);
-        bullets(e.accomplishments);
-      }
-    });
-  }
+    },
 
-  /* ---------- education & credentials ---------- */
-
-  if (m.education.length || m.credentials.length) {
-    sectionTitle(HEADINGS.education, 12);
-    if (m.education.length && m.credentials.length) level(SUBHEADINGS.education, 0);
-    m.education.forEach((e, i) => {
-      if (i > 0) y += 12 * PX;
-      ensure(lh(10.5) + lh(10) * 2);
-      titleRow(e.degree, e.date);
-      if (e.institution) paragraph(e.institution, 10);
-      if (e.honors) {
-        y += 1 * PX;
-        paragraph(e.honors, 9.5, INK2, 'I400i');
-      }
-    });
-    if (m.credentials.length) {
-      if (m.education.length) y += 14 * PX;
-      level(SUBHEADINGS.credentials, 0);
-      m.credentials.forEach((c, i) => {
+    trainings() {
+      if (!m.trainings.length) return;
+      sectionTitle(HEADINGS.trainings, lh(10.5) + lh(10));
+      railEntries(m.trainings, (t, i) => {
         if (i > 0) y += 12 * PX;
-        ensure(lh(10.5) + lh(10));
-        titleRow(c.name, c.date);
-        if (c.meta) paragraph(c.meta, 10);
+        ensure(lh(10.5) + (t.meta ? lh(10) : 0));
+        titleRow(t.name, t.date);
+        if (t.meta) paragraph(t.meta, 10);
       });
+    },
+
+    references() {
+      if (!m.references.length) return;
+      const entryH = (r) => lh(10.5) + (r.meta ? lh(10) : 0) + (r.contact ? lh(10) : 0);
+      sectionTitle(HEADINGS.references, entryH(m.references[0]));
+      m.references.forEach((r, i) => {
+        if (i > 0) y += 12 * PX;
+        ensure(entryH(r));
+        titleRow(r.name, '');
+        if (r.meta) paragraph(r.meta, 10);
+        if (r.contact) paragraph(r.contact, 10);
+      });
+    },
+  };
+  const draw = (ids) => ids.forEach((id) => BLOCKS[id]());
+
+  /* ---------- layouts ---------- */
+
+  // Two-column layouts: the main column tells the story, the side column holds the facts.
+  const MAIN = ['summary', 'experience', 'references'];
+  const SIDE = ['skills', 'education', 'trainings'];
+  const pageLeft = PAGE.mx;
+  const pageRight = PAGE.w - PAGE.mx;
+
+  if (D.layout === 'sidebar') {
+    // A tinted column down the left edge of every page.
+    const sideW = PAGE.w * 0.31;
+    column(sideW + 30 * PX, pageRight);
+    drawHeader({ withPhoto: false, withContact: false });
+    draw(MAIN);
+
+    const painted = new Set();
+    const paintSide = (pg) => {
+      if (painted.has(pg)) return;
+      painted.add(pg);
+      fill(D.side.bg);
+      doc.rect(0, 0, sideW, PAGE.h, 'F');
+    };
+    doc.setPage(1);
+    paintSide(1);
+    onEnterPage = paintSide;
+    column(24 * PX, sideW - 22 * PX);
+    y = PAGE.mt;
+    drawSideContact();
+    draw(SIDE);
+    onEnterPage = null;
+    // Pages only the main column reached still get the side panel (it never overlaps their text).
+    for (let pg = 1; pg <= doc.getNumberOfPages(); pg++) {
+      doc.setPage(pg);
+      paintSide(pg);
     }
-  }
+  } else if (D.layout === 'split') {
+    // Full-width header, then a wide main column and a narrow side column with a divider.
+    drawHeader();
+    const gutter = 28 * PX;
+    const split = pageLeft + (pageRight - pageLeft) * 0.63;
+    const start = { page: pageNo(), y };
+    column(pageLeft, split - gutter / 2);
+    draw(MAIN);
+    const ends = [{ page: pageNo(), y }];
+    doc.setPage(start.page);
+    y = start.y;
+    column(split + gutter / 2, pageRight);
+    draw(SIDE);
+    ends.push({ page: pageNo(), y });
 
-  /* ---------- seminars & trainings ---------- */
-
-  if (m.trainings.length) {
-    sectionTitle(HEADINGS.trainings, lh(10.5) + lh(10));
-    m.trainings.forEach((t, i) => {
-      if (i > 0) y += 12 * PX;
-      ensure(lh(10.5) + (t.meta ? lh(10) : 0));
-      titleRow(t.name, t.date);
-      if (t.meta) paragraph(t.meta, 10);
-    });
-  }
-
-  /* ---------- references (always last) ---------- */
-
-  if (m.references.length) {
-    const entryH = (r) => lh(10.5) + (r.meta ? lh(10) : 0) + (r.contact ? lh(10) : 0);
-    sectionTitle(HEADINGS.references, entryH(m.references[0]));
-    m.references.forEach((r, i) => {
-      if (i > 0) y += 12 * PX;
-      ensure(entryH(r));
-      titleRow(r.name, '');
-      if (r.meta) paragraph(r.meta, 10);
-      if (r.contact) paragraph(r.contact, 10);
-    });
+    const lastPage = Math.max(...ends.map((e) => e.page));
+    const lastY = Math.max(...ends.filter((e) => e.page === lastPage).map((e) => e.y));
+    fill(D.divider);
+    for (let pg = start.page; pg <= lastPage; pg++) {
+      doc.setPage(pg);
+      const top = pg === start.page ? start.y + 20 * PX : PAGE.mt;
+      const bot = pg === lastPage ? lastY : bottom;
+      if (bot > top) doc.rect(split - 0.5 * PX, top, 1 * PX, bot - top, 'F');
+    }
+  } else {
+    // Single column (Timeline adds its date rail inside the dated sections).
+    drawHeader();
+    draw(['summary', 'skills', 'experience', 'education', 'trainings', 'references']);
   }
 
   return doc;

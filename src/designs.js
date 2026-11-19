@@ -1,6 +1,8 @@
-// Resume designs. Every design is a single column of real text in the same order, so each one
-// stays ATS-readable and imports back cleanly (side-by-side columns get merged line by line by
-// PDF readers and ATS parsers, so no design uses them) — they differ in header, headings, color and type.
+// Resume designs. All are real, selectable text. Most are a single column in reading order —
+// the safest for ATS parsers. `layout` picks a different arrangement: 'sidebar' and 'split'
+// put the content in two columns (ATS parsers can merge side-by-side lines, so their
+// descriptions say so); 'timeline' stays single-column with dates in a left rail.
+// A PDF downloaded from this app always imports back exactly (the form data is embedded).
 // exportPdf.js draws them; ResumePreview.jsx + .paper.design-* styles mirror them on screen.
 
 const INK = [17, 17, 17];
@@ -60,6 +62,44 @@ export const RESUME_DESIGNS = [
     bullet: { shape: 'square', color: [194, 65, 12] },
     accent: [194, 65, 12],
   },
+
+  /* ---- Different layouts ---- */
+  {
+    id: 'sidebar',
+    name: 'Sidebar',
+    desc: 'Tinted side column with photo, contact, skills and education (two columns — single-column designs are safest for ATS)',
+    layout: 'sidebar',
+    side: { bg: [238, 242, 255] },
+    header: { style: 'plain', align: 'left', rule: 'none', name: INK, title: [67, 56, 202], contact: INK2, icon: '#4338ca' },
+    section: { style: 'rule', color: [67, 56, 202], rule: [199, 210, 254] },
+    skills: { style: 'chips', bg: [255, 255, 255], border: [199, 210, 254], text: [55, 48, 163] },
+    bullet: { shape: 'dot', color: [67, 56, 202] },
+    accent: [67, 56, 202],
+  },
+  {
+    id: 'split',
+    name: 'Two Column',
+    desc: 'Full-width header, then experience beside a narrow column of skills and education (two columns — single-column designs are safest for ATS)',
+    layout: 'split',
+    divider: [209, 250, 229],
+    header: { style: 'plain', align: 'left', rule: 'solid', ruleColor: [4, 120, 87], name: INK, title: [4, 120, 87], contact: INK2, icon: '#047857' },
+    section: { style: 'underline', color: [4, 120, 87], rule: [4, 120, 87] },
+    skills: { style: 'chips', bg: [236, 253, 245], border: [167, 243, 208], text: [6, 95, 70] },
+    bullet: { shape: 'dot', color: [4, 120, 87] },
+    accent: [4, 120, 87],
+  },
+  {
+    id: 'timeline',
+    name: 'Timeline',
+    desc: 'Dates in a left rail with a line and a dot for every entry',
+    layout: 'timeline',
+    rail: { line: [233, 213, 255], dot: [126, 34, 206] },
+    header: { style: 'plain', align: 'left', rule: 'solid', ruleColor: [126, 34, 206], name: INK, title: [126, 34, 206], contact: INK2, icon: '#7e22ce' },
+    section: { style: 'rule', color: [126, 34, 206], rule: [233, 213, 255] },
+    skills: { style: 'chips', bg: [250, 245, 255], border: [233, 213, 255], text: [107, 33, 168] },
+    bullet: { shape: 'dot', color: [126, 34, 206] },
+    accent: [126, 34, 206],
+  },
 ];
 
 export const DEFAULT_DESIGN = 'classic';
@@ -84,5 +124,10 @@ export function designVars(id) {
     '--d-chip-text': rgb(d.skills.text),
     '--d-bullet': rgb(d.bullet.color),
     '--d-accent': rgb(d.accent),
+    '--d-head-rule': rgb(d.header.ruleColor || INK),
+    '--d-side': d.side ? rgb(d.side.bg) : 'transparent',
+    '--d-divider': d.divider ? rgb(d.divider) : 'transparent',
+    '--d-rail-line': d.rail ? rgb(d.rail.line) : 'transparent',
+    '--d-rail-dot': d.rail ? rgb(d.rail.dot) : 'transparent',
   };
 }

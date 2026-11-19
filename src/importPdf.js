@@ -642,8 +642,32 @@ const SOFT_SKILLS = new Set([
 ].map(headingKey));
 const isSoftSkill = (s) => SOFT_SKILLS.has(headingKey(s));
 
+// A date range stacked over two lines in a date column ("Jan 2024 –" above "May 2024"),
+// as timeline layouts draw it.
+const DANGLING_RANGE_RE = new RegExp(`^(${DATE})\\s*(?:–|—|-|to)\\s*(?:\\t|$)`, 'i');
+const RANGE_END_RE = new RegExp(`^(${DATE}|present|current|now|to date)\\s*(?=\\t|$)`, 'i');
+
+/** Rejoin stacked date ranges into a normal title row: "Title ⇥ Jan 2024 – May 2024". */
+function joinStackedDates(lines) {
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const a = lines[i];
+    const b = lines[i + 1];
+    const start = DANGLING_RANGE_RE.exec(a.text);
+    const end = b && start && RANGE_END_RE.exec(b.text);
+    if (!end) { out.push(a); continue; }
+    const rest = a.text.slice(start[0].length).trim();
+    out.push({ ...a, text: `${rest}${rest ? '\t' : ''}${start[1]} – ${end[1]}` });
+    const after = b.text.slice(end[0].length).replace(/^\t/, '').trim();
+    if (after) out.push({ ...b, text: after });
+    i++; // b is consumed
+  }
+  return out;
+}
+
 /** Heuristic resume parser → partial resume state. */
-export function parseResume(lines) {
+export function parseResume(rawLines) {
+  const lines = joinStackedDates(rawLines);
   const sections = { header: [] };
   let current = 'header';
   let skillBucket = 'hard';
