@@ -3,7 +3,8 @@ import { ensureCssFont, letterFont } from '../fonts.js';
 
 /**
  * Standard block-format cover letter: 1" margins, chosen font (default Times New Roman 12pt), single-spaced,
- * one blank line between parts, two above the salutation and the close, three for the signature.
+ * one blank line between parts, two below the date and above the salutation and the close,
+ * three for the signature.
  * The recipient's name (or HIRING MANAGER) is in bold capitals.
  * exportPdf.js (drawLetter) draws the identical layout.
  */
@@ -21,7 +22,7 @@ const LetterPreview = forwardRef(function LetterPreview({ model: m, style }, ref
       <div className="r-letter">
         {m.date && <p className="l-date">{m.date}</p>}
 
-        <address className="l-block">
+        <address className={m.date ? 'l-gap2' : 'l-block'}>
           {m.recipient.map((line, i) => <div key={i} className={i === 0 ? 'l-to' : undefined}>{line}</div>)}
           {m.recipient.length < 2 && (
             <div className="r-placeholder"><div>Company</div><div>Company address</div></div>

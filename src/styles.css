@@ -613,7 +613,7 @@ button { font: inherit; color: inherit; }
 
 /* Cover letter — standard business format, mirrors drawLetter() in exportPdf.js:
    1in margins, Times New Roman 12pt, single-spaced (1.15), one blank line between parts,
-   two above the salutation and the close, three blank lines for the signature. */
+   two below the date and above the salutation and the close, three blank lines for the signature. */
 .paper.paper-letter {
   padding: 96px;                       /* 1 inch on every side */
   font-family: "Times New Roman", Times, "Liberation Serif", serif;

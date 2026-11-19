@@ -680,7 +680,7 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
   /**
    * Standard business-letter format (mirrors .paper-letter styles):
    * 1in margins, chosen font and size (default Times 12pt), black, single-spaced (1.15),
-   * one blank line between parts, two above the salutation and the complimentary close,
+   * one blank line between parts, two below the date and above the salutation and the complimentary close,
    * and three blank lines for the signature. The recipient's name is in bold capitals. Text is
    * real PDF text in every font, so it stays extractable for ATS.
    *
@@ -838,7 +838,7 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
     };
 
     part(['date']);
-    part(m.recipientKeys || []);
+    part(m.recipientKeys || [], 2); // two blank lines between the date and the recipient
     part(['subject']);
     part(['salutation'], 2); // two blank lines above the salutation
     m.paragraphs.forEach((runs, i) => {
