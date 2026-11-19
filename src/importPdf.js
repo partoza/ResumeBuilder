@@ -799,7 +799,7 @@ export function parseLetter(lines) {
     content.body = paras.slice(1, -1).join('\n\n');
   }
 
-  const signoff = { name: '', nameBold: true, showTitle: false, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false };
+  const signoff = { name: '', showTitle: false, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false };
   if (closeIdx >= 0) {
     const close = texts[closeIdx].replace(/,?$/, ',');
     signoff.complimentary = COMPLIMENTARY_CLOSES.find((c) => c.toLowerCase() === close.toLowerCase()) || 'Sincerely,';

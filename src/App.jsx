@@ -5,6 +5,7 @@ import LetterPreview from './components/LetterPreview.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 import Select from './components/Select.jsx';
 import PdfPages from './components/PdfPages.jsx';
+import DesignGallery from './components/DesignGallery.jsx';
 import { documentText, findMisspellings, ignoreWord, preloadSpellcheck, replaceWordIn } from './spellcheck.js';
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Download, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
 import { ensureCssFont, isStandardFont } from './fonts.js';
@@ -701,6 +702,7 @@ export default function App() {
             </div>
 
             <form className="form" onSubmit={(e) => e.preventDefault()} autoComplete="on" key={docTab}>
+              {!isLetter && <DesignGallery value={design} onChange={setDesign} />}
               {sections.map((s, i) => {
                 const key = `${docTab}:${s.id}`;
                 return (

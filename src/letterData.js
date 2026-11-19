@@ -82,7 +82,6 @@ export const LETTER_SECTIONS = [
     fields: [
       { key: 'complimentary', label: 'Complimentary close', type: 'select', options: COMPLIMENTARY_CLOSES, full: true },
       { key: 'name', label: 'Name in signature', placeholder: 'Uses your name from the Resume tab if blank', full: true },
-      { key: 'nameBold', label: 'Bold name', type: 'checkbox', full: true },
       { key: 'showTitle', label: 'Add a line under your name', type: 'checkbox', full: true },
       { key: 'title', label: 'Line under your name', placeholder: 'Applicant', full: true, showWhen: (s) => s.showTitle },
       { key: 'enclosure', label: 'Add “Enclosure: Resume” below the signature', type: 'checkbox', full: true },
@@ -99,7 +98,7 @@ export function blankLetter() {
   return {
     recipient: { date: todayIso(), name: '', title: '', company: '', address: '' },
     content: { position: '', greeting: DEFAULT_GREETING, greetingOther: '', salutation: '', opening: '', body: '', closing: '' },
-    signoff: { name: '', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false },
+    signoff: { name: '', showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false },
     format: { ...DEFAULT_FORMAT },
     styles: {},
   };
@@ -126,7 +125,7 @@ export function sampleLetter() {
       closing:
         'I would welcome the opportunity to discuss how my skills can support your development team. Thank you for your time and consideration. I can be reached at 0917 123 4567 or andrea.villanueva@email.com. I look forward to hearing from you.',
     },
-    signoff: { name: 'Andrea Reyes Villanueva', nameBold: true, showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false },
+    signoff: { name: 'Andrea Reyes Villanueva', showTitle: true, title: 'Applicant', complimentary: 'Sincerely,', enclosure: false },
     format: { ...DEFAULT_FORMAT },
     styles: {},
   };
@@ -197,7 +196,7 @@ export function buildLetterModel(personal, letter) {
 
   const format = letter.format || DEFAULT_FORMAT;
   const font = letterFont(format.font);
-  const nameBold = s.nameBold !== false;
+  const nameBold = true; // the signature name is bold (it can still be changed from the preview)
 
   // Every other line of the letter (date, recipient, Re:, salutation, close, signature,
   // enclosure) can be formatted from the preview too. Their text comes from other fields,
