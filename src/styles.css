@@ -443,7 +443,7 @@ button { font: inherit; color: inherit; }
 .r-bullets li::marker { color: var(--ink-3); }
 
 .r-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.r-chip { font-size: 9.5pt; padding: 2px 9px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink-2); background: #fafafa; }
+.r-chip { font-size: 9.5pt; padding: 2px 9px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink-2); background: #fafafa; max-width: 100%; overflow-wrap: anywhere; }
 .r-skillgrp + .r-skillgrp { margin-top: 8px; }
 .r-skillgrp .r-level { margin: 0 0 4px; }
 .r-gap { margin-top: 14px; }

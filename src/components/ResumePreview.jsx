@@ -1,7 +1,7 @@
 import { forwardRef, useEffect } from 'react';
 import { Facebook, Github, Globe, Link, Linkedin, Mail, Phone, Pin } from './Icons.jsx';
 import { HEADINGS, SUBHEADINGS } from '../model.js';
-import { designOf, designVars } from '../designs.js';
+import { LAYOUT_COLUMNS, designOf, designVars } from '../designs.js';
 import { ensureCssFont, fontByName } from '../fonts.js';
 
 const CONTACT_ICON = { phone: Phone, mail: Mail, pin: Pin, linkedin: Linkedin, facebook: Facebook, github: Github, globe: Globe, link: Link };
@@ -64,9 +64,6 @@ function Entry({ title, date, children }) {
   );
 }
 
-// Two-column layouts: the main column tells the story, the side column holds the facts.
-const MAIN = ['summary', 'experience', 'references'];
-const SIDE = ['skills', 'education', 'trainings'];
 const ALL = ['summary', 'skills', 'experience', 'education', 'trainings', 'references'];
 
 /** Renders the normalized resume model (see model.js). exportPdf.js draws the same design. */
@@ -78,6 +75,7 @@ const ResumePreview = forwardRef(function ResumePreview({ model: m, design, styl
   const serifCss = d.serif ? fontByName(d.serif)?.css : null;
   const empty = !m.name && !m.contact.length;
   const sidebar = layout === 'sidebar';
+  const { main: MAIN, side: SIDE } = LAYOUT_COLUMNS[layout] || {};
 
   const nameBlock = (
     <>

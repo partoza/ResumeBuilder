@@ -9,7 +9,7 @@ import inter600 from '@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf
 import inter700 from '@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf?url';
 import { HEADINGS, SUBHEADINGS } from './model.js';
 import { fontByName, isStandardFont, pdfFontFor, registerPdfFonts, styleKey } from './fonts.js';
-import { designOf } from './designs.js';
+import { LAYOUT_COLUMNS, designOf } from './designs.js';
 import { paperOf } from './paper.js';
 
 export const MAX_PAGES = 2;
@@ -357,28 +357,35 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
       paragraph(items.join('  ·  '), 10, K.text);
       return;
     }
-    const h = 25 * PX;
     const padX = 10 * PX;
+    const padY = 3 * PX;
     const gap = 6 * PX;
-    font('I400', 9.5, K.text);
     let x = left;
-    ensure(h);
+    let rowH = 0; // tallest chip in the current row
     for (const item of items) {
-      const w = Math.min(doc.getTextWidth(T(item)) + padX * 2, width);
+      // A skill too long for the column wraps inside a taller chip.
+      font('I400', 9.5, K.text);
+      const lines = wrap(item, width - padX * 2);
+      const w = Math.min(Math.max(...lines.map((l) => doc.getTextWidth(l))) + padX * 2, width);
+      const h = padY * 2 + lines.length * lh(9.5);
       if (x > left && x + w > right + 0.01) {
         x = left;
-        y += h + gap;
-        ensure(h);
+        y += rowH + gap;
+        rowH = 0;
       }
+      if (x === left) ensure(h);
       doc.setFillColor(...K.bg);
       doc.setDrawColor(...K.border);
       doc.setLineWidth(1 * PX);
       doc.roundedRect(x + 0.5 * PX, y + 0.5 * PX, w - PX, h - PX, 4 * PX, 4 * PX, 'FD');
-      font('I400', 9.5, K.text);
-      text(item, x + padX, y + 3 * PX, 9.5);
+      lines.forEach((ln, i) => {
+        font('I400', 9.5, K.text);
+        text(ln, x + padX, y + padY + i * lh(9.5), 9.5);
+      });
       x += w + gap;
+      rowH = Math.max(rowH, h);
     }
-    y += h;
+    y += rowH;
   }
 
   const NARROW = 80; // mm — columns narrower than this put entry dates under the title
@@ -937,9 +944,8 @@ async function createPdf(kind, m, { source, paper, design } = {}) {
 
   /* ---------- layouts ---------- */
 
-  // Two-column layouts: the main column tells the story, the side column holds the facts.
-  const MAIN = ['summary', 'experience', 'references'];
-  const SIDE = ['skills', 'education', 'trainings'];
+  // Two-column layouts: which sections go in each column (designs.js).
+  const { main: MAIN, side: SIDE } = LAYOUT_COLUMNS[D.layout] || {};
   const pageLeft = PAGE.mx;
   const pageRight = PAGE.w - PAGE.mx;
 

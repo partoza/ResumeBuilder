@@ -102,6 +102,22 @@ export const RESUME_DESIGNS = [
   },
 ];
 
+/**
+ * Which sections go in which column for the two-column layouts (in order).
+ * Sidebar: the side column holds the quick facts (skills, references) next to the photo and
+ * contact details; everything with dates reads down the main column.
+ */
+export const LAYOUT_COLUMNS = {
+  sidebar: {
+    main: ['summary', 'experience', 'education', 'trainings'],
+    side: ['skills', 'references'],
+  },
+  split: {
+    main: ['summary', 'experience', 'references'],
+    side: ['skills', 'education', 'trainings'],
+  },
+};
+
 export const DEFAULT_DESIGN = 'classic';
 export const designOf = (id) => RESUME_DESIGNS.find((d) => d.id === id) || RESUME_DESIGNS[0];
 
