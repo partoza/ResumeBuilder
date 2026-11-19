@@ -5,9 +5,10 @@ import LetterPreview from './components/LetterPreview.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 import Select from './components/Select.jsx';
 import PdfPages from './components/PdfPages.jsx';
-import DesignGallery from './components/DesignGallery.jsx';
+import DesignDialog from './components/DesignDialog.jsx';
+import { preloadDesignThumbs } from './designThumbs.js';
 import { documentText, findMisspellings, ignoreWord, preloadSpellcheck, replaceWordIn } from './spellcheck.js';
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Download, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Download, Layout, Logo, Moon, Sun, Swap, Upload } from './components/Icons.jsx';
 import { ensureCssFont, isStandardFont } from './fonts.js';
 import { formatRange, mapRichText, parseRich, runsInRange, serializeRich } from './rich.js';
 import { selectionToRanges } from './previewSelection.js';
@@ -118,6 +119,7 @@ export default function App() {
   const [swap, setSwap] = useState(initialUi.swap);
   const [paper, setPaper] = useState(initialUi.paper); // per document: { resume, letter }
   const [design, setDesign] = useState(initialUi.design); // resume design (designs.js)
+  const [designOpen, setDesignOpen] = useState(false); // the Select design window
   const [view, setView] = useState('edit'); // mobile only
   const [zoom, setZoom] = useState('fit');
   const [scale, setScale] = useState(1);
@@ -673,7 +675,20 @@ export default function App() {
               <h1>{docInfo.heading}</h1>
               <p>{docInfo.intro}</p>
               <div className="intro-actions">
-                <button className="btn btn-secondary btn-sm" onClick={loadSample}>Load sample</button>
+                {isLetter ? (
+                  <button className="btn btn-secondary btn-sm" onClick={loadSample}>Load sample</button>
+                ) : (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setDesignOpen(true)}
+                    onPointerEnter={preloadDesignThumbs}
+                    onFocus={preloadDesignThumbs}
+                    aria-haspopup="dialog"
+                  >
+                    <Layout size={14} />
+                    Select design
+                  </button>
+                )}
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => importInputRef.current?.click()}
@@ -702,7 +717,6 @@ export default function App() {
             </div>
 
             <form className="form" onSubmit={(e) => e.preventDefault()} autoComplete="on" key={docTab}>
-              {!isLetter && <DesignGallery value={design} onChange={setDesign} />}
               {sections.map((s, i) => {
                 const key = `${docTab}:${s.id}`;
                 return (
@@ -889,6 +903,9 @@ export default function App() {
 
       {toastView}
       {confirmDialog}
+      {designOpen && !isLetter && (
+        <DesignDialog value={design} onChange={setDesign} onClose={() => setDesignOpen(false)} />
+      )}
     </>
   );
 }
